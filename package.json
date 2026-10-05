@@ -36,7 +36,8 @@
     "lib/model-control.js",
     "lib/model-ui.js",
     "cordis.patch.yml",
-    "README.md"
+    "README.md",
+    "GUIDE.zh.md"
   ],
   "dsh": {
     "bundle": {

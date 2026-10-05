@@ -6,6 +6,8 @@ An OpenAI-compatible HTTP face for the DeepSeek Harness, so a phone running the
 The package is named `dsh-openai-bridge`; its repository is
 [`AprilCrystal/dsh-remote`](https://github.com/AprilCrystal/dsh-remote).
 
+**中文使用指南 → [GUIDE.zh.md](GUIDE.zh.md)** — 面向使用者（怎么登录、各个按钮干什么、权限验证码、引用文件与上传的区别、安全边界、常见问题）。本文件面向开发者。
+
 ## Install
 
 ```sh
