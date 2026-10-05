@@ -208,13 +208,14 @@ Exercised end-to-end against a running desktop profile:
 | `test/model.test.mjs` | 41 assertions green — catalogue shaping, per-provider failure isolation, selection validation, and that the selection is never installed from the context `setup` receives |
 | `test/context.test.mjs` | 85 assertions green — the occupancy fold (including that an unmeasured context is `null`, not 0%), the `ManualCompactionError` code mapping, service resolution, and the route contract |
 | `test/clients.test.mjs` | 122 assertions green — an un-approved peer refused everything including the shell, the code never present in anything a remote peer can read, approval surviving a restart through `$DSH_HOME`, a dead code that expires instead of locking a device out forever, a manual replacement clearing that lock, one popup for a LAN sweep rather than one per address, and the same phone recognised when a dual-stack socket respells it |
+| `test/output.test.mjs` | 23 assertions green — reasoning on its own callback and never on the OpenAI face, the fold built lazily, the stop route keeping queued input unless asked, and a copy that admits when it could not copy |
 | `test/recovery.test.mjs` | 34 assertions green — in-flight acquisition is shared per key (including by a reentrant caller), a failed key is freed, and a create that lost to a resume reports the real cause |
 | `test/browse.test.mjs` | 37 assertions green over real HTTP: the virtual root, relative single-root backwards compatibility, and the refusals — traversal, out-of-root absolute paths, and reading outside every root |
 | `test/setup.test.mjs` | 56 assertions green — the token-file fallback, the served page's own script, and that `/setup` answers 403 to anything that is not loopback |
 | `test/questions.test.mjs` | 34 assertions green — the answer reaching the `user-questions/request` waterfall, a partial batch refused without resolving anything, a downstream refusal NOT ending the race, a desktop skip still counting as an answer, a question from another session still being shown, an abort ending the race rather than hanging, and an unchanged poll leaving the DOM alone so typing is not interrupted |
 | `test/integration.test.mjs` | 58 assertions green against a real `node:http` server mounting the real panel: the auth guard covers the new asset, the routes are actually wired, the cookie bootstrap preserves the popup's `id`/`view` while dropping the token, the full handshake completes, and every inline script the phone is actually served parses |
 
-565 assertions across ten suites, plus a standalone guard (`test/shell-guard.mjs`)
+588 assertions across eleven suites, plus a standalone guard (`test/shell-guard.mjs`)
 for the panel's single-template shell.
 
 Still unverified: **how any of this renders on a real phone.** The server half of
@@ -435,6 +436,39 @@ one attribute text can reach, so link schemes are whitelisted to
 User turns are restricted to `source.kind === 'user'`; injected context
 (runtime snapshots, tool notices) is filtered out rather than rendered, because
 it would otherwise drown the conversation.
+
+### Watching a turn: folded thinking, copy, stop
+
+**Thinking streams into a folded block.** It is built on the first
+`reasoning-delta` and starts closed, above the reply. Lazily, because a turn that
+streams text without ever reasoning must not show an empty fold claiming it
+thought. The summary reads 思考（正在输出）while it is live and drops the
+parenthetical when the turn ends.
+
+Reasoning arrives on its **own callback** rather than a kind flag on one shared
+callback, because the two callers want opposite things: the panel folds it into
+the transcript, and the `/v1` face must drop it entirely. A chat client showing a
+model's private reasoning as its answer is a leak, not a feature — and with a
+shared callback that leak is a one-line mistake. A caller that passes nothing for
+it gets it dropped, and a test asserts that exactly one call site takes it.
+
+**Copy** exists on every message (the reply plus every folded block, because "copy
+this message" should mean what is on screen) and on **every code block**, since
+selecting a long block by hand on a touch screen is miserable.
+
+It cannot use `navigator.clipboard`: that exists only in a secure context, and
+this panel is served over plain http on a LAN address, so on a phone it is usually
+absent. The fallback is the old textarea-and-`execCommand` selection, which it
+must run **synchronously inside the click** — a programmatic copy needs the user
+gesture that started it. And it reports what happened: a button claiming 已复制
+when nothing reached the clipboard is worse than one that says 长按选择, because
+the reader pastes and gets the previous contents.
+
+**Stop** appears only while a turn is streaming, and it **keeps queued input**.
+Stopping the output is not the same decision as discarding what you already
+typed, so clearing the queue is a separate request. `agent.cancel` is a documented
+no-op when nothing is running, so the reply reports the state observed *before*
+the call rather than claiming a stop that did nothing.
 
 ### Workspace
 

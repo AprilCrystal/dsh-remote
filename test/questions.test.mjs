@@ -432,7 +432,7 @@ await check('a new composer always fills itself', () => {
   // A fresh slots element with a matching key would otherwise decide there is
   // nothing to do and stay empty forever.
   const shell = readFileSync(new URL('../lib/panel.js', import.meta.url), 'utf8')
-  assert.match(shell, /currentComposer = \{ slots, input, send, note \};[\s\S]{0,160}slotsKey = null;/u)
+  assert.match(shell, /currentComposer = \{ slots, input, send,[\s\S]{0,200}?slotsKey = null;/u)
 })
 
 await check('a rebuild that does land carries the caret over', () => {
