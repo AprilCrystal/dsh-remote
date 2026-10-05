@@ -211,10 +211,10 @@ Exercised end-to-end against a running desktop profile:
 | `test/recovery.test.mjs` | 34 assertions green — in-flight acquisition is shared per key (including by a reentrant caller), a failed key is freed, and a create that lost to a resume reports the real cause |
 | `test/browse.test.mjs` | 37 assertions green over real HTTP: the virtual root, relative single-root backwards compatibility, and the refusals — traversal, out-of-root absolute paths, and reading outside every root |
 | `test/setup.test.mjs` | 56 assertions green — the token-file fallback, the served page's own script, and that `/setup` answers 403 to anything that is not loopback |
-| `test/questions.test.mjs` | 31 assertions green — the answer reaching the `user-questions/request` waterfall, a partial batch refused without resolving anything, a downstream refusal NOT ending the race, a desktop skip still counting as an answer, a question from another session still being shown, and an abort ending the race rather than hanging |
+| `test/questions.test.mjs` | 34 assertions green — the answer reaching the `user-questions/request` waterfall, a partial batch refused without resolving anything, a downstream refusal NOT ending the race, a desktop skip still counting as an answer, a question from another session still being shown, an abort ending the race rather than hanging, and an unchanged poll leaving the DOM alone so typing is not interrupted |
 | `test/integration.test.mjs` | 58 assertions green against a real `node:http` server mounting the real panel: the auth guard covers the new asset, the routes are actually wired, the cookie bootstrap preserves the popup's `id`/`view` while dropping the token, the full handshake completes, and every inline script the phone is actually served parses |
 
-562 assertions across ten suites, plus a standalone guard (`test/shell-guard.mjs`)
+565 assertions across ten suites, plus a standalone guard (`test/shell-guard.mjs`)
 for the panel's single-template shell.
 
 Still unverified: **how any of this renders on a real phone.** The server half of
@@ -341,6 +341,13 @@ Two consequences of that incident are worth keeping:
   returns a short `recent` history — `offered`, `panel-answer`,
   `downstream-answer`, `aborted`, `failed` — plus `youAre`, the session the
   caller says it is showing, so a mismatch is readable rather than inferred.
+- **An unchanged poll does not touch the DOM.** It only rebuilds when the set of
+  things to show changed, because `replaceChildren` destroys the input the reader
+  is typing in — which on a phone **dismisses the keyboard mid-word**. The
+  in-place update inside a card is no defence against that: the poll is what
+  rebuilds, not the card. A rebuild that does land (a new card arrived) carries
+  the caret over, though that alone does not reliably reopen a phone keyboard;
+  refusing the rebuild is what does.
 
 A batch must answer **every** question it was given: a partial batch is refused
 with a 400 and resolves nothing, because the tool's contract is one answer per

@@ -415,6 +415,32 @@ await check('a stale draft cannot re-submit an answered question', () => {
   assert.match(shell, /for \(const key of Array\.from\(questionDraft\.keys\(\)\)\) if \(!live\.has\(key\)\) questionDraft\.delete\(key\)/u)
 })
 
+console.log('typing is not interrupted')
+
+await check('an unchanged poll does not rebuild the cards', () => {
+  // The reported bug: the keyboard closed while typing in the custom field. The
+  // poll runs every two seconds and replaceChildren destroys the focused input,
+  // which on a phone dismisses the keyboard mid-word. The in-place update inside a
+  // card is no defence, because the POLL is what rebuilds.
+  const shell = readFileSync(new URL('../lib/panel.js', import.meta.url), 'utf8')
+  assert.match(shell, /const key = JSON\.stringify\(\[/u)
+  assert.match(shell, /if \(key !== slotsKey\) \{/u)
+  assert.match(shell, /let slotsKey = null;/u)
+})
+
+await check('a new composer always fills itself', () => {
+  // A fresh slots element with a matching key would otherwise decide there is
+  // nothing to do and stay empty forever.
+  const shell = readFileSync(new URL('../lib/panel.js', import.meta.url), 'utf8')
+  assert.match(shell, /currentComposer = \{ slots, input, send, note \};[\s\S]{0,160}slotsKey = null;/u)
+})
+
+await check('a rebuild that does land carries the caret over', () => {
+  const shell = readFileSync(new URL('../lib/panel.js', import.meta.url), 'utf8')
+  assert.match(shell, /custom\.dataset\.q = question\.id;/u)
+  assert.match(shell, /slots\.querySelector\('\[data-q="' \+ carried\.q \+ '"\]'\)/u)
+})
+
 await rm(root, { recursive: true, force: true })
 
 console.log(`\n${passed} passed, ${failed} failed`)
