@@ -254,9 +254,15 @@
       meta.className = 'meta'
       var left = Math.max(0, Math.round((entry.expiresAt - Date.now()) / 60000))
       meta.textContent = entry.locked
-        ? '错误次数太多，这个验证码已作废 —— 等它过期后，那台设备再访问一次就会生成新的。'
+        ? '错误次数太多，这个验证码已作废。换一个，或者等它过期后那台设备再访问一次。'
         : '到 ' + new Date(entry.expiresAt).toLocaleTimeString() + ' 失效（约 ' + left + ' 分钟）。把那台设备上的验证码填掉。'
-      box.append(who, code, meta)
+      var swapRow = document.createElement('div')
+      swapRow.style.marginTop = '9px'
+      var swap = document.createElement('button')
+      swap.textContent = entry.locked ? '换一个验证码' : '重新生成'
+      swap.onclick = function () { replaceCode(entry.ip) }
+      swapRow.appendChild(swap)
+      box.append(who, code, meta, swapRow)
       nodes.push(box)
     })
     pend.replaceChildren.apply(pend, nodes)
@@ -307,6 +313,29 @@
       .then(function (res) { return res.json() })
       .then(function (data) { state.clientGate = data.clientGate; renderClients() })
       .catch(function () {})
+  }
+
+  /** Replace a waiting device's code, which is also how a dead one comes back. */
+  function replaceCode(ip) {
+    var msg = el('clientmsg')
+    msg.className = 'msg'
+    msg.textContent = '正在换…'
+    fetch(base + '/clients/refresh', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ ip: ip }),
+    })
+      .then(function (res) { return res.json().then(function (d) { return { ok: res.ok, data: d } }) })
+      .then(function (result) {
+        if (!result.ok) throw new Error(result.data.error || 'failed')
+        msg.className = 'msg ok'
+        msg.textContent = '新验证码：' + result.data.code + '（旧的立刻失效）'
+        return loadClients()
+      })
+      .catch(function (error) {
+        msg.className = 'msg bad'
+        msg.textContent = '换码失败：' + error.message
+      })
   }
 
   function forget(ip) {

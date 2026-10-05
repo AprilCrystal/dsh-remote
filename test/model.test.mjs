@@ -8,6 +8,7 @@
  * instead of a rejected request.
  */
 
+import { readFileSync } from 'node:fs'
 import { createModelControl } from '../lib/model-control.js'
 import vm from 'node:vm'
 
@@ -269,6 +270,31 @@ group('a host with no LLM registry')
   const res = await call(control, 'GET', '/api/model', 'session=s1')
   ok('the catalogue degrades to empty rather than throwing', res.status === 200, `status ${res.status}`)
   ok('it reports no groups', Array.isArray(res.json?.groups) && res.json.groups.length === 0)
+}
+
+group('where the selection is installed')
+
+{
+  // This one cost a real session. Installing from inside `setup` looks natural —
+  // that is where the preset is mounted — but the only way to name the agent
+  // there is `agentCtx.agent`, and a scoped context exposes only what it declared
+  // it needs, so that read throws `cannot get property "agent" without inject`.
+  // The throw escaped `setup`, which failed the whole acquisition; the bridge then
+  // fell through to `create`, which answered "session already exists" — a message
+  // about the store, for a bug in a listener.
+  const wire = readFileSync(new URL('../lib/index.js', import.meta.url), 'utf8')
+  // Assert against the code, not the prose: the comment explaining this bug has
+  // to be able to name the very expression it warns against.
+  const code = wire.replace(/\/\*[\s\S]*?\*\//gu, '').replace(/^[ \t]*\/\/.*$/gmu, '')
+  ok('the guarded read is gone', !code.includes('agentCtx.agent'),
+    'agentCtx.agent is back in the code; the scoped context cannot name its agent')
+  ok('nothing installs from inside setup', !code.includes('installSelection(agentCtx)'))
+  ok('the installer gets the documented context',
+    code.includes('installModelSelection(agent.ctx, selectionFor(sessionId))'))
+  ok('and the agent is handed over after it exists',
+    code.includes('installSelection(handle.agent)'))
+  ok('a failure to install cannot fail the acquisition',
+    code.includes('could not install the model selection for'))
 }
 
 console.log(`\n${passed} passed, ${failed} failed`)

@@ -19,6 +19,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import vm from 'node:vm'
 import { apply } from '../lib/index.js'
 import { installSetup, isLoopback, readTokenFile, resolveTokenFile } from '../lib/setup.js'
 
@@ -281,6 +282,32 @@ group('an unconfigured plugin mounts nothing else')
   ok('a token file enables the bridge without any config change',
     routes.some((r) => r.path === '/v1'), JSON.stringify(routes.map((r) => r.path)))
   ok('and the setup page still mounts too', routes.some((r) => r.path === '/setup'))
+  // The one route a not-yet-approved device may reach, so it has to be mounted
+  // whenever the bridge is: whether a device is approved is not known until it asks.
+  ok('and the pairing route mounts', routes.some((r) => r.path === '/pair'),
+    JSON.stringify(routes.map((r) => r.path)))
+}
+
+group('the served setup page')
+
+{
+  const html = await readFile(new URL('../lib/setup-page.html', import.meta.url), 'utf8')
+  const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/gu)].map((match) => match[1])
+  ok('it has exactly one inline script', scripts.length === 1, String(scripts.length))
+  let parseError = null
+  try {
+    new vm.Script(scripts[0])
+  } catch (error) {
+    parseError = error
+  }
+  ok('and that script parses as JavaScript', parseError === null, String(parseError))
+  ok('it renders a waiting device and its code',
+    html.includes('function renderClients') && html.includes('entry.code'))
+  ok('it offers to replace a code', html.includes("'/clients/refresh'"))
+  ok('and to forget a device', html.includes("'/clients/forget'"))
+  // The card polls so a code appears while the operator is standing at the phone.
+  ok('and it refreshes the device card on its own',
+    html.includes('if (!document.hidden) loadClients()'), 'the device card no longer polls')
 }
 
 await rm(sandbox, { recursive: true, force: true })

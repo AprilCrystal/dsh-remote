@@ -108,6 +108,10 @@ override:
 | `ipAllowlist` | — | `true` | Refuse every peer that has not been approved, whatever token it holds. Loopback never pairs. See [The per-client allowlist](#the-per-client-allowlist). |
 | `pairingPath` | — | `/pair` | Where a not-yet-approved device posts its code. The only route reachable from the LAN without approval. |
 | `pairingTtlMs` | — | `600000` | How long a minted pairing code stays valid. |
+| `pairingAttempts` | — | `5` | Wrong codes tolerated per code before it is dead for the rest of its TTL. |
+| `pairingPopup` | — | `true` | Open the setup page on this machine by itself when a device starts waiting. |
+| `pairingPopupCooldownMs` | — | `15000` | Shortest gap between automatic popups, so a LAN sweep cannot spray windows. |
+| `pairingMaxPending` | — | `16` | Waiting devices kept; past this the oldest is dropped. |
 
 ## Session mapping
 
@@ -149,23 +153,35 @@ it. Check the host log for `openai-bridge:` lines.
 
 ### `session "..." already exists`
 
-Two defects used to produce this message, and both were about the same thing:
-losing a race and then reporting it as a fact about the store.
+Three defects produced this message. The first two were about losing a race and
+then reporting it as a fact about the store; the third was the actual cause and
+the reason the message existed at all.
 
-**Concurrent acquisition.** `acquireAgent` chooses between `resume` and `create`
-by asking whether the session is live, so two callers asking for the same *cold*
-session at the same moment both see "not live", both reach `create`, and the
-loser is answered with `session "..." already exists`. Only the turn path was
-serialized; the model picker and the context meter were not, so a phone tapping
-either while a turn was running could hit it. Every caller now goes through
-`ensureAgent`, which shares one in-flight acquisition per session id — the same
-guard the harness's own session controller keeps, for the same reason.
+**A guarded property read.** The model selection was installed from inside the
+`setup` callback, where the only way to name the agent is `agentCtx.agent`. A
+scoped context exposes only the services it declared it needs, so that read
+throws `cannot get property "agent" without inject`. The throw escaped `setup`,
+which failed every `resume` of an existing conversation — so the phone could
+never continue one. The bridge then fell through to `create`, which answered
+`session "..." already exists`: a message about the store, for a bug in a
+listener. The selection is now installed after the agent exists, on `agent.ctx`,
+which is what the harness's own installer documents and what its session
+controller passes. Model switching from the phone had never worked either, for
+the same reason — the install never completed.
+
+**Concurrent acquisition.** `acquireAgent` chose between `resume` and `create` by
+asking whether the session was live, so two callers asking for the same *cold*
+session at the same moment both saw "not live", both reached `create`, and the
+loser was answered with the id being taken. Only the turn path was serialized.
+Every caller now goes through `ensureAgent`, which shares one in-flight
+acquisition per session id — the same guard the harness's own session controller
+keeps.
 
 **A swallowed cause.** When the session really was on disk but `resume` failed,
-the fallthrough discarded the reason and let `create` report the id as taken.
-The create failure is now compared with the resume failure: if `create` says the
-id exists *and* a resume was attempted, the answer names the real failure instead
-of the store's complaint. Otherwise the original error is rethrown untouched.
+the fallthrough discarded the reason and let `create` report the id as taken. The
+create failure is now compared with the resume failure, so a create that lost to
+a resume names the real cause — which is how the guarded read above was found.
+Any other create failure is rethrown untouched.
 
 ## Verified
 
@@ -189,15 +205,15 @@ Exercised end-to-end against a running desktop profile:
 | Typed transcript blocks, live | `{"text":138,"reasoning":182,"tool-call":285}` on one session — 467 of 605 blocks fold away |
 | `test/panel.test.mjs` | 45 assertions green; **47 when run elevated**, where the two symlink-containment assertions execute instead of skipping |
 | `test/permission.test.mjs` | 53 assertions green — the code-confinement property is asserted negatively |
-| `test/model.test.mjs` | 36 assertions green — catalogue shaping, per-provider failure isolation, and selection validation |
+| `test/model.test.mjs` | 41 assertions green — catalogue shaping, per-provider failure isolation, selection validation, and that the selection is never installed from the context `setup` receives |
 | `test/context.test.mjs` | 85 assertions green — the occupancy fold (including that an unmeasured context is `null`, not 0%), the `ManualCompactionError` code mapping, service resolution, and the route contract |
-| `test/clients.test.mjs` | 100 assertions green — an un-approved peer refused everything including the shell, the code never present in anything a remote peer can read, approval surviving a restart through `$DSH_HOME`, a dead code that expires instead of locking a device out forever, and the same phone recognised when a dual-stack socket respells it |
+| `test/clients.test.mjs` | 122 assertions green — an un-approved peer refused everything including the shell, the code never present in anything a remote peer can read, approval surviving a restart through `$DSH_HOME`, a dead code that expires instead of locking a device out forever, a manual replacement clearing that lock, one popup for a LAN sweep rather than one per address, and the same phone recognised when a dual-stack socket respells it |
 | `test/recovery.test.mjs` | 34 assertions green — in-flight acquisition is shared per key (including by a reentrant caller), a failed key is freed, and a create that lost to a resume reports the real cause |
 | `test/browse.test.mjs` | 37 assertions green over real HTTP: the virtual root, relative single-root backwards compatibility, and the refusals — traversal, out-of-root absolute paths, and reading outside every root |
-| `test/setup.test.mjs` | 49 assertions green — the token-file fallback, and that `/setup` answers 403 to anything that is not loopback |
+| `test/setup.test.mjs` | 56 assertions green — the token-file fallback, the served page's own script, and that `/setup` answers 403 to anything that is not loopback |
 | `test/integration.test.mjs` | 54 assertions green against a real `node:http` server mounting the real panel: the auth guard covers the new asset, the routes are actually wired, the cookie bootstrap preserves the popup's `id`/`view` while dropping the token, and the full handshake completes |
 
-493 assertions across nine suites, plus a standalone guard (`test/shell-guard.mjs`)
+527 assertions across nine suites, plus a standalone guard (`test/shell-guard.mjs`)
 for the panel's single-template shell.
 
 Still unverified: **how any of this renders on a real phone.** The server half of
@@ -471,7 +487,16 @@ restart clears every un-approved device and keeps every approved one.
 it stays dead for its TTL — and then the TTL expires the whole entry, so the
 device's next request mints a fresh code. A lock that outlived its TTL would be a
 permanent lockout with nothing on the setup page to explain it, because that page
-only shows live entries.
+only shows live entries. The setup page can also replace a code by hand, which is
+the way back in when one has run out of attempts or was read aloud to the wrong
+person: the replacement clears the lock and restarts the clock.
+
+**The page opens itself.** A device that starts waiting opens the setup page on
+this machine, because an operator should not have to be watching to find out that
+somebody is trying to get in. That popup is the only thing a stranger can trigger
+here, so it is rate-limited to one per `pairingPopupCooldownMs` and the waiting
+list is capped — a sweep across the LAN opens one window and mints a handful of
+codes, not one per address.
 
 Devices are removed from the setup page, which rewrites the file immediately.
 

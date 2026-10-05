@@ -77,9 +77,22 @@
         # six digits against a code shown on this machine.
         pairingPath: /pair
         # How long a minted pairing code stays valid (milliseconds). Wrong codes
-        # are tolerated five times per code; the code then dies with it, and the
-        # device's next request mints a fresh one.
+        # are tolerated `pairingAttempts` times per code; the code then dies with
+        # it, and the device's next request — or the button on the setup page —
+        # mints a fresh one.
         pairingTtlMs: 600000
+        # Wrong codes tolerated per code before it is dead for the rest of its TTL.
+        pairingAttempts: 5
+        # Open the setup page on this machine by itself when a device starts
+        # waiting, so the operator does not have to be watching for it. Set false
+        # and the code is still there, just not pushed at you.
+        pairingPopup: true
+        # Shortest gap between two automatic popups (milliseconds). A sweep across
+        # the LAN would otherwise open one window per address.
+        pairingPopupCooldownMs: 15000
+        # How many waiting devices are kept. Past this the oldest is dropped, so a
+        # scan cannot fill the page with entries nobody will pair.
+        pairingMaxPending: 16
         # Approved devices live in $DSH_HOME/openai-bridge-clients.json, written
         # when a device is approved and when one is removed from the setup page.
 

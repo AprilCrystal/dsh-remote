@@ -58,7 +58,7 @@ function fakeReq(method, remote, body) {
   return {
     method,
     socket: { remoteAddress: remote },
-    headers: { 'user-agent': 'TestAgent/1.0' },
+    headers: { 'user-agent': 'TestAgent/1.0', host: '10.111.99.94:19387' },
     async *[Symbol.asyncIterator]() {
       for (const chunk of chunks) yield chunk
     },
@@ -103,12 +103,14 @@ function makeGate(overrides = {}) {
   // gate and change what it starts out believing.
   fileCounter += 1
   const file = overrides.file ?? join(workdir, `clients-${fileCounter}.json`)
+  const popups = []
   const gate = createClientGate(
     { logger: { info: (line) => logs.push(String(line)), warn: (line) => logs.push(String(line)) } },
     {
       file,
       now: () => clock,
       randomInt: () => code,
+      openPopup: (url) => popups.push(url),
       ...overrides.options,
     },
   )
@@ -116,6 +118,7 @@ function makeGate(overrides = {}) {
     gate,
     file,
     logs,
+    popups,
     advance: (ms) => { clock += ms },
     setCode: (next) => { code = next },
   }
@@ -398,6 +401,87 @@ group('the page it shows')
   ok('an unknown address does not print an empty gap', dead.includes('未知地址'))
 }
 
+group('opening the setup page on this machine')
+
+{
+  const { gate, popups } = makeGate()
+  await request(gate, 'GET', '10.0.0.9', '/bridge/')
+  ok('a device starting to wait opens the page', popups.length === 1, JSON.stringify(popups))
+  ok('on loopback, so it lands on this machine', popups[0]?.startsWith('http://127.0.0.1:'), popups[0])
+  ok('keeping the port the request arrived on', popups[0]?.endsWith(':19387/setup'), popups[0])
+
+  await request(gate, 'GET', '10.0.0.9', '/bridge/')
+  ok('a repeat request does not open another', popups.length === 1, JSON.stringify(popups))
+}
+
+{
+  // A sweep across the LAN is why the cooldown exists: without it, every address
+  // would open its own window on the operator's desktop.
+  const { gate, popups, advance } = makeGate()
+  for (const ip of ['10.0.0.1', '10.0.0.2', '10.0.0.3']) await request(gate, 'GET', ip, '/bridge/')
+  ok('a burst of unknown peers opens exactly one', popups.length === 1, JSON.stringify(popups))
+  advance(15_001)
+  await request(gate, 'GET', '10.0.0.4', '/bridge/')
+  ok('and a later one opens again once the cooldown passes', popups.length === 2, JSON.stringify(popups))
+}
+
+{
+  const { gate, popups } = makeGate({ options: { desktopPopup: false } })
+  await request(gate, 'GET', '10.0.0.9', '/bridge/')
+  ok('the popup can be turned off', popups.length === 0)
+  ok('without changing the refusal', gate.pending().length === 1)
+}
+
+{
+  const { gate, popups } = makeGate()
+  await request(gate, 'GET', '127.0.0.1', '/bridge/')
+  ok('loopback never opens a popup for itself', popups.length === 0)
+}
+
+group('replacing a code by hand')
+
+{
+  const { gate, setCode } = makeGate()
+  ok('a device that is not waiting has nothing to replace', gate.refreshCode('10.0.0.9') === null)
+
+  await request(gate, 'GET', '10.0.0.9', '/bridge/')
+  ok('the first code is the minted one', gate.pending()[0]?.code === '424242')
+  setCode(777777)
+  ok('a replacement is minted on demand', gate.refreshCode('10.0.0.9') === '777777')
+  ok('and the device sees it', gate.pending()[0]?.code === '777777')
+
+  const right = await request(gate, 'POST', '10.0.0.9', DEFAULT_PAIR_PATH, { code: '777777' })
+  ok('the replacement is the one that works', right.res.status === 200, `${right.res.status} ${right.res.body}`)
+}
+
+{
+  // The reason an operator reaches for the button: a code that ran out of tries.
+  const { gate, setCode } = makeGate({ options: { maxAttempts: 1 } })
+  await request(gate, 'GET', '10.0.0.9', '/bridge/')
+  await request(gate, 'POST', '10.0.0.9', DEFAULT_PAIR_PATH, { code: '000000' })
+  ok('the code is dead', gate.pending()[0]?.locked === true)
+  setCode(135790)
+  gate.refreshCode('10.0.0.9')
+  ok('a replacement clears the lock', gate.pending()[0]?.locked === false)
+  ok('and the attempt count', gate.pending()[0]?.attempts === 0)
+  const back = await request(gate, 'POST', '10.0.0.9', DEFAULT_PAIR_PATH, { code: '135790' })
+  ok('so a refreshed code is a way back in', back.res.status === 200 && gate.clients().length === 1)
+}
+
+group('what a LAN sweep can pile up')
+
+{
+  const { gate } = makeGate({ options: { maxPending: 3, desktopPopup: false } })
+  for (const ip of ['10.0.0.1', '10.0.0.2', '10.0.0.3']) await request(gate, 'GET', ip, '/bridge/')
+  ok('the waiting list is capped', gate.pending().length === 3, String(gate.pending().length))
+  await request(gate, 'GET', '10.0.0.4', '/bridge/')
+  const waiting = gate.pending()
+  ok('and the newest request still gets a code', waiting.some((entry) => entry.ip === '10.0.0.4'),
+    JSON.stringify(waiting.map((entry) => entry.ip)))
+  ok('while the oldest is dropped', !waiting.some((entry) => entry.ip === '10.0.0.1'),
+    JSON.stringify(waiting.map((entry) => entry.ip)))
+}
+
 group('the wiring')
 
 {
@@ -426,6 +510,7 @@ group('the wiring')
     setup.indexOf('if (!isLoopback(req))') < setup.indexOf("rest === '/state'"),
     `${setup.indexOf('if (!isLoopback(req))')} < ${setup.indexOf("rest === '/state'")}`)
   ok('and offers a way to forget a device', setup.includes("rest === '/clients/forget'"))
+  ok('and a way to replace a code by hand', setup.includes("rest === '/clients/refresh'"))
 }
 
 rmSync(workdir, { recursive: true, force: true })
