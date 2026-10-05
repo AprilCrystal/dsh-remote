@@ -475,6 +475,13 @@ only shows live entries.
 
 Devices are removed from the setup page, which rewrites the file immediately.
 
+The code is deliberately never written to the host log, so the page is the only
+place it appears — which would be a lockout with no way out if that page's script
+ever failed. `http://127.0.0.1:<port>/setup/state` is the fallback: it is the same
+loopback-only JSON the page reads, so the code is still reachable with no UI at
+all. And `ipAllowlist: false` plus a restart turns the gate off entirely if
+something about it is wrong.
+
 ### The context meter, and compacting from the phone
 
 📊 in the cluster is the phone's copy of the ring beside the desktop's send
