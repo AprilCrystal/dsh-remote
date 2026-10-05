@@ -144,6 +144,26 @@ a plugin that throws during load can take the whole composition down with it,
 which would lock the operator out of the very GUI they need in order to remove
 it. Check the host log for `openai-bridge:` lines.
 
+### `session "..." already exists`
+
+Two defects used to produce this message, and both were about the same thing:
+losing a race and then reporting it as a fact about the store.
+
+**Concurrent acquisition.** `acquireAgent` chooses between `resume` and `create`
+by asking whether the session is live, so two callers asking for the same *cold*
+session at the same moment both see "not live", both reach `create`, and the
+loser is answered with `session "..." already exists`. Only the turn path was
+serialized; the model picker and the context meter were not, so a phone tapping
+either while a turn was running could hit it. Every caller now goes through
+`ensureAgent`, which shares one in-flight acquisition per session id — the same
+guard the harness's own session controller keeps, for the same reason.
+
+**A swallowed cause.** When the session really was on disk but `resume` failed,
+the fallthrough discarded the reason and let `create` report the id as taken.
+The create failure is now compared with the resume failure: if `create` says the
+id exists *and* a resume was attempted, the answer names the real failure instead
+of the store's complaint. Otherwise the original error is rethrown untouched.
+
 ## Verified
 
 Exercised end-to-end against a running desktop profile:
@@ -168,11 +188,12 @@ Exercised end-to-end against a running desktop profile:
 | `test/permission.test.mjs` | 53 assertions green — the code-confinement property is asserted negatively |
 | `test/model.test.mjs` | 36 assertions green — catalogue shaping, per-provider failure isolation, and selection validation |
 | `test/context.test.mjs` | 85 assertions green — the occupancy fold (including that an unmeasured context is `null`, not 0%), the `ManualCompactionError` code mapping, service resolution, and the route contract |
+| `test/recovery.test.mjs` | 34 assertions green — in-flight acquisition is shared per key (including by a reentrant caller), a failed key is freed, and a create that lost to a resume reports the real cause |
 | `test/browse.test.mjs` | 37 assertions green over real HTTP: the virtual root, relative single-root backwards compatibility, and the refusals — traversal, out-of-root absolute paths, and reading outside every root |
 | `test/setup.test.mjs` | 49 assertions green — the token-file fallback, and that `/setup` answers 403 to anything that is not loopback |
 | `test/integration.test.mjs` | 54 assertions green against a real `node:http` server mounting the real panel: the auth guard covers the new asset, the routes are actually wired, the cookie bootstrap preserves the popup's `id`/`view` while dropping the token, and the full handshake completes |
 
-359 assertions across seven suites, plus a standalone guard (`test/shell-guard.mjs`)
+393 assertions across eight suites, plus a standalone guard (`test/shell-guard.mjs`)
 for the panel's single-template shell.
 
 Still unverified: **how any of this renders on a real phone.** The server half of
