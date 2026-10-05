@@ -28,6 +28,15 @@
         fileRoot: !!js process.env.DSH_OPENAI_BRIDGE_FILEROOT ?? undefined
         # Where the mobile panel mounts.
         panelPath: /bridge
+        # Where the loopback-only setup page mounts. This is the ONE route served
+        # before a token exists, so it answers only to requests from this machine
+        # and returns 403 to everyone else. Open it to read the address a phone
+        # should use, and to generate the token.
+        setupPath: /setup
+        # The token may also live in $DSH_HOME/openai-bridge.token. A token set
+        # HERE always wins; the file is the fallback that lets the setup page mint
+        # one in a click, without this file being edited by hand — and without the
+        # plugin guessing at a profile it has no way to identify.
         # Which sessions the panel may answer approvals for: 'all' lets it answer
         # for any session it can open, 'bridge' narrows it to sessions in `cwd`.
         approvalScope: all

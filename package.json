@@ -35,6 +35,8 @@
     "lib/permission-ui.js",
     "lib/model-control.js",
     "lib/model-ui.js",
+    "lib/setup.js",
+    "lib/setup-page.html",
     "cordis.patch.yml",
     "README.md",
     "GUIDE.zh.md"

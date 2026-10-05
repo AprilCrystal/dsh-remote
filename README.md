@@ -28,8 +28,14 @@ export it or set it in the profile's `cordis.patch.yml`:
 DSH_OPENAI_BRIDGE_TOKEN=<a-long-random-secret>
 ```
 
-**An empty token means the bridge does not mount at all.** It fails closed rather
-than exposing an unauthenticated endpoint.
+**With no token the bridge does not mount — with one exception.** `GET /setup`
+answers from this machine only (403 to every other peer) and is where you read the
+address a phone should use and generate the token. Everything else — `/v1`,
+`/bridge`, and the `approval/request` listener — stays unmounted, so an
+unconfigured plugin still cannot touch the approval flow.
+
+The token may be set here, or left to `$DSH_HOME/openai-bridge.token`, which the
+setup page writes for you. A configured token always wins.
 
 ## What it gives you
 
@@ -53,6 +59,13 @@ Provider → "OpenAI API Compatible"**:
 webserver and inherits that server's bind, which is `127.0.0.1` unless a
 deployment deliberately patches the `webserver` row to `0.0.0.0`. This plugin
 never widens the bind itself.
+
+**The one route that answers before a token exists is `/setup`, and it is
+restricted to this machine.** It checks the peer address and returns 403 to
+anything that is not loopback — which matters precisely because a deployment that
+DID patch the bind to `0.0.0.0` is reachable from the whole LAN, so the bind is
+not the gate. That page shows the token and can write the token file; while the
+token is empty, nothing else is mounted.
 
 **Every session the bridge drives is pinned to the `read-only` permission
 preset** (`sandbox: read-only` + `approval: ask`, shipped in the base bundle).
