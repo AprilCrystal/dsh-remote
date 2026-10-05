@@ -161,11 +161,16 @@ await check('the reasoning frame is handled in the stream reader', () => {
 
 console.log('streaming does not do quadratic work')
 
-await check('the thinking body streams PLAIN TEXT, one node per delta', () => {
+await check('the thinking body streams PLAIN TEXT, appended on a timer', () => {
   // Re-parsing the whole chain of thought on every delta is quadratic, and a long
   // one made expanding the fold crawl on a phone. Appending a text node is O(1).
-  assert.match(shell, /thinkingBody\.append\(document\.createTextNode\(piece\)\);/u)
+  assert.match(shell, /thinkingBody\.append\(document\.createTextNode\(thinkingPending\)\);/u)
   assert.doesNotMatch(shell, /thinkingBody\.replaceChildren\(renderMarkdown\(thinking\)\);/u)
+  // Buffered as well: one append per delta forces a layout of the growing fold on
+  // every frame, and with the fold OPEN that is what leaves the page unresponsive
+  // enough to drop taps.
+  assert.match(shell, /thinkingPending \+= piece;/u)
+  assert.match(shell, /if \(thinkingTimer === null\) thinkingTimer = setTimeout\(flushThinking, 150\);/u)
 })
 
 await check('markdown is rendered exactly once, when the turn ends', () => {

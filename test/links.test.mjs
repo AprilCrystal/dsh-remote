@@ -173,6 +173,15 @@ check('prose is scanned through textWithPaths, not the plain writer', () => {
   assert.match(source, /if \(m\.index > last\) textWithPaths\(parent, part\.slice\(last, m\.index\)\);/u)
 })
 
+check('the TAIL of a run is scanned too, or a plain paragraph shows no path', () => {
+  // The bug the screenshots showed: the tail went through the plain writer, so a
+  // paragraph with NO inline markup — the common case for a path on its own line —
+  // never reached the scanner and the path stayed inert text. Every test passed
+  // because they exercised the scanner directly rather than this call site.
+  assert.match(source, /if \(last < part\.length\) textWithPaths\(parent, part\.slice\(last\)\);/u)
+  assert.doesNotMatch(source, /textWithBreaks\(parent, part\.slice\(last\)\)/u)
+})
+
 check('the chip is styled as a chip', () => {
   assert.match(source, /button\.filechip \{ display:inline-block;/u)
 })

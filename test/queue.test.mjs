@@ -41,6 +41,7 @@ const TOKEN = 'queue-token'
 const root = await mkdtemp(join(tmpdir(), 'queue-test-'))
 const wire = readFileSync(new URL('../lib/index.js', import.meta.url), 'utf8')
 const shell = readFileSync(new URL('../lib/panel.js', import.meta.url), 'utf8')
+const fab = readFileSync(new URL('../lib/panel-fab.js', import.meta.url), 'utf8')
 
 /* ── harness ──────────────────────────────────────────────────────────────── */
 
@@ -304,6 +305,30 @@ await check('the running state is not part of the rebuild key', () => {
   assert.match(shell, /if \(queueHead !== null\) queueHead\.textContent = queueHeadText\(items\.length\);/u)
 })
 
+await check('the inbox has its own view, reached from the button cluster', () => {
+  // The tray only exists while composing, so without this there is nowhere to look
+  // at what is staged once the reader has scrolled away or switched views.
+  assert.match(shell, /async function showInbox\(\) \{/u)
+  assert.match(shell, /window\.__bridgeInbox = \(\) => \{ void showInbox\(\); \};/u)
+  assert.match(fab, /id: 'inbox',/u)
+  assert.match(fab, /if \(typeof window\.__bridgeInbox === 'function'\) window\.__bridgeInbox\(\)/u)
+})
+
+await check('the view and the tray are one behaviour, two surfaces', () => {
+  // A queue action taken in the view repaints the VIEW; from the composer it
+  // repaints the tray. That choice is the only thing that differs.
+  assert.match(shell, /function refreshQueueViews\(\) \{/u)
+  assert.match(shell, /if \(inboxRefresh !== null\) \{ refreshQueueViews\(\); return; \}/u)
+  assert.match(shell, /cancel\.onclick = \(\) => \{ queueEditing = null; queueEditText = ''; refreshQueueViews\(\); \};/u)
+  assert.match(shell, /queueEditText = item\.text;\n\s+refreshQueueViews\(\);/u)
+})
+
+await check('leaving the view drops its repaint hook', () => {
+  // Otherwise a stale hook fires at a view that is gone.
+  assert.match(shell, /function restoreConversation\(\) \{\n\s+inboxRefresh = null;/u)
+  assert.match(shell, /setHeader\('待发送', \(\) => \{ inboxRefresh = null; void restoreConversation\(\); \}\);/u)
+})
+
 await check('the host reports whether a turn is running', () => {
   assert.match(wire, /running: agent\.status === 'running',/u)
 })
@@ -315,7 +340,15 @@ await check('a queue failure is reported, never swallowed', () => {
   // refused it, or the tap never landed.
   assert.match(shell, /async function queueRequest\(payload\)/u)
   assert.match(shell, /failure = data\.error \|\| \('HTTP ' \+ String\(res\.status\)\);/u)
-  assert.match(shell, /note\.textContent = '排队失败：' \+ queueError;/u)
+  assert.match(shell, /queueError = '排队失败：' \+ failure;/u)
+  assert.match(shell, /note\.textContent = queueError;/u)
+})
+
+await check('an empty box says so instead of doing nothing', () => {
+  // "点了好几遍没反应": a tap with an empty box and a broken button look identical.
+  assert.match(shell, /function notice\(text\) \{/u)
+  assert.match(shell, /notice\('先在输入框里打字，再点「排队」或「插话」。'\);/u)
+  assert.match(shell, /notice\('先在输入框里打字，再发送。'\);/u)
 })
 
 await check('a failed insert gives the typed text back', () => {
