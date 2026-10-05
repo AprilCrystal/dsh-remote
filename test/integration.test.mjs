@@ -75,6 +75,8 @@ async function serve(options = {}) {
       driveTurn: async () => ({ text: '' }),
     },
     permission: { desktopPopup: false, ...(options.permission ?? {}) },
+    ...(options.model === undefined ? {} : { model: options.model }),
+    ...(options.context === undefined ? {} : { context: options.context }),
   })
 
   const handler = routes[0]
@@ -302,6 +304,80 @@ group('a disabled gate')
     ok('the panel does not reference the dialog script', !panel.text.includes('permission-ui.js'))
   } finally {
     await off.close()
+  }
+}
+
+group('the context meter over a real socket')
+
+{
+  // Wiring is what breaks silently: the meter's own logic is covered in
+  // context.test.mjs, but whether `installPanel` actually hands it the routes,
+  // and whether the shell advertises an asset the panel will not serve, are
+  // facts only a real request can settle.
+  const seen = []
+  const withContext = await serve({
+    context: {
+      contextState: async (sessionId, fresh, load) => {
+        seen.push({ sessionId, fresh, load })
+        return {
+          available: true,
+          session: sessionId,
+          percent: 37,
+          usedTokens: 372000,
+          contextWindow: 1000000,
+          breakdown: { systemTokens: 1500, toolsTokens: 5600, messageTokens: 322000 },
+          compact: { available: true, busy: false, message: '' },
+        }
+      },
+      compactSession: async (sessionId) => ({
+        compacted: true,
+        shadowed: 7,
+        message: `compacted ${sessionId}`,
+      }),
+    },
+  })
+  try {
+    const shell = await hit(withContext.origin, '/bridge/', { cookie: COOKIE })
+    ok('the shell wires the meter in when the host supplies it',
+      shell.text.includes('context-ui.js'))
+
+    const anon = await hit(withContext.origin, '/bridge/context-ui.js')
+    ok('the meter script is behind the same auth guard', anon.status === 401, `status ${anon.status}`)
+
+    const authed = await hit(withContext.origin, '/bridge/context-ui.js', { cookie: COOKIE })
+    ok('an authenticated request gets it', authed.status === 200, `status ${authed.status}`)
+    ok('it is typed as JavaScript',
+      String(authed.headers.get('content-type')).startsWith('text/javascript'))
+
+    const state = await hit(withContext.origin, '/bridge/api/context?session=s1', { cookie: COOKIE })
+    ok('the meter reads over the real route', state.status === 200 && state.json?.percent === 37,
+      `status ${state.status} ${state.text}`)
+    ok('a bare read does not attach the conversation', state.json?.compact?.busy === false
+      && seen[0]?.load === false, JSON.stringify(seen[0]))
+
+    const compacted = await hit(withContext.origin, '/bridge/api/context', {
+      method: 'POST',
+      cookie: COOKIE,
+      body: { session: 's1', action: 'compact' },
+    })
+    ok('compacting reaches the host callback', compacted.status === 200 && compacted.json?.shadowed === 7,
+      `status ${compacted.status} ${compacted.text}`)
+    ok('and the answer carries a fresh reading', compacted.json?.state?.percent === 37
+      && seen[seen.length - 1]?.load === true, JSON.stringify(seen[seen.length - 1]))
+  } finally {
+    await withContext.close()
+  }
+
+  // A panel mounted with no context module must not advertise one.
+  const bare = await serve()
+  try {
+    const panel = await hit(bare.origin, '/bridge/', { cookie: COOKIE })
+    ok('a panel without the module does not reference the meter script',
+      !panel.text.includes('context-ui.js'))
+    const absent = await hit(bare.origin, '/bridge/context-ui.js', { cookie: COOKIE })
+    ok('and it serves no meter script', absent.status === 404, `status ${absent.status}`)
+  } finally {
+    await bare.close()
   }
 }
 

@@ -166,16 +166,21 @@ Exercised end-to-end against a running desktop profile:
 | Typed transcript blocks, live | `{"text":138,"reasoning":182,"tool-call":285}` on one session — 467 of 605 blocks fold away |
 | `test/panel.test.mjs` | 45 assertions green; **47 when run elevated**, where the two symlink-containment assertions execute instead of skipping |
 | `test/permission.test.mjs` | 53 assertions green — the code-confinement property is asserted negatively |
-| `test/model.test.mjs` | 35 assertions green — catalogue shaping, per-provider failure isolation, and selection validation |
+| `test/model.test.mjs` | 36 assertions green — catalogue shaping, per-provider failure isolation, and selection validation |
+| `test/context.test.mjs` | 85 assertions green — the occupancy fold (including that an unmeasured context is `null`, not 0%), the `ManualCompactionError` code mapping, service resolution, and the route contract |
 | `test/browse.test.mjs` | 37 assertions green over real HTTP: the virtual root, relative single-root backwards compatibility, and the refusals — traversal, out-of-root absolute paths, and reading outside every root |
-| `test/integration.test.mjs` | 37 assertions green against a real `node:http` server mounting the real panel: the auth guard covers the new asset, the routes are actually wired, the cookie bootstrap preserves the popup's `id`/`view` while dropping the token, and the full handshake completes |
+| `test/setup.test.mjs` | 49 assertions green — the token-file fallback, and that `/setup` answers 403 to anything that is not loopback |
+| `test/integration.test.mjs` | 54 assertions green against a real `node:http` server mounting the real panel: the auth guard covers the new asset, the routes are actually wired, the cookie bootstrap preserves the popup's `id`/`view` while dropping the token, and the full handshake completes |
 
-207 assertions across five suites, plus a standalone guard for the panel's
-single-template shell.
+359 assertions across seven suites, plus a standalone guard (`test/shell-guard.mjs`)
+for the panel's single-template shell.
 
 Still unverified: **how any of this renders on a real phone.** The server half of
-the approval card, the permission dialog, the model picker and the file browser is
-proven; the browser half has never been seen on a device.
+the approval card, the permission dialog, the model picker, the context meter and
+the file browser is proven; the browser half has never been seen on a device. The
+panel installs `error` and `unhandledrejection` handlers that render into a
+dismissable bar at the top of the page, because a silent JS failure on a phone is
+otherwise indistinguishable from a button that does not exist.
 
 Two bugs were caught by the live API rather than by reading source, and are
 worth remembering: `readTitleSnapshot` returns a `{ session, title }` wrapper
@@ -282,10 +287,10 @@ handshake still works and the popup URL is written to the host log.
 ### The bottom-right action cluster
 
 Everything secondary lives behind one button in the corner: the permission
-preset, the model and its reasoning effort, **引用文件** (insert a path from this
-machine into the composer), and the two scroll ends. These used to be header
-chips, which squeezed the conversation title down to an ellipsis the moment there
-were two of them.
+preset, the model and its reasoning effort, **上下文占用** and compacting,
+**引用文件** (insert a path from this machine into the composer), and the two
+scroll ends. These used to be header chips, which squeezed the conversation title
+down to an ellipsis the moment there were two of them.
 
 The cluster measures the composer on every render and offsets itself by its
 height, because the composer is sticky at the bottom of the viewport — so the
@@ -405,6 +410,42 @@ this bridge's setup, so no selection of ours is coupled to it and flipping one
 would silently do nothing. The picker detects that case and says so instead of
 reporting a change that did not happen. Switch that one on the desktop, or start a
 fresh conversation.
+
+### The context meter, and compacting from the phone
+
+📊 in the cluster is the phone's copy of the ring beside the desktop's send
+button, and it reads the same two session projections — `contextPressure` for the
+occupancy and `contextBreakdown` for the system/tools/conversation split. Same
+source, so the two surfaces cannot disagree about how full a context is. The
+breakdown is a heuristic token estimate, which is why the three rows can sum to
+something other than the headline figure; that is true on the desktop too.
+
+**There is no cold read.** `ctx.sessionProjections.snapshot()` takes a `Session`
+object and `ctx.sessions.get()` only returns attached ones, so a conversation the
+process is not holding has no numbers at all. Opening the meter therefore reports
+"not loaded" and stops there; a separate **读取占用** action attaches the session
+first. Attaching deliberately does not start a turn, and because it runs this
+bridge's `setup`, the conversation stays switchable from the phone afterwards.
+
+Compaction calls the same `ctx.compaction.compactNow(agent, signal)` the desktop's
+`/compact` command calls, so it produces an ordinary compaction: a summary node
+the desktop renders as a checkpoint. `compaction-basic` is mounted twice in a
+default composition — the base bundle inserts it as a host-plane row, and each
+shipped agent preset mounts its own instance inside an isolated realm — so the
+service is resolved per conversation: the agent's own preset realm first, then the
+host row. The backend's own `ManualCompactionError` codes are folded into
+sentences — `busy` becomes a 409 saying the conversation is mid-turn, and the rest
+(a changed span, a failed summary, a failed save) keep their distinct wording
+instead of collapsing into "error". An unrecognised code keeps its raw message,
+because disguising an unexpected failure as a known one would hide a bug.
+Compaction is two taps in the sheet, not a native `confirm()`, which is a silent
+no-op in plenty of in-app webviews.
+
+The module registers into the action cluster like the others, but with one
+difference: if the cluster never arrives it renders a standalone button instead.
+A script that fails to load must not take the meter down with it, and the
+difference between "the cluster is broken" and "the meter is broken" is worth
+being able to see from the phone.
 
 ## Backing it out
 

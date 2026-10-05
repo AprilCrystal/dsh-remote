@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "OpenAI-compatible HTTP endpoint plus a mobile panel for the DeepSeek Harness: drive a session from a phone, read any session's transcript, browse and stage files, answer approvals, and change the sandbox preset behind a code that is shown on the desktop.",
+  "description": "OpenAI-compatible HTTP endpoint plus a mobile panel for the DeepSeek Harness: drive a session from a phone, read any session's transcript, browse and stage files, answer approvals, switch the model, watch and compact the context, and change the sandbox preset behind a code that is shown on the desktop.",
   "license": "UNLICENSED",
   "repository": {
     "type": "git",
@@ -35,6 +35,8 @@
     "lib/permission-ui.js",
     "lib/model-control.js",
     "lib/model-ui.js",
+    "lib/context-control.js",
+    "lib/context-ui.js",
     "lib/setup.js",
     "lib/setup-page.html",
     "cordis.patch.yml",
