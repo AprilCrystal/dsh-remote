@@ -105,6 +105,9 @@ override:
 | `authorizationCode` | — | `''` | Non-empty switches the handshake to a fixed code you choose. Empty means the server mints a one-time code that is displayed on the desktop only. |
 | `authorizationTtlMs` | — | `180000` | How long a pending authorization stays confirmable. |
 | `desktopPopup` | — | `true` | Whether to auto-open the authorization popup on this PC. |
+| `ipAllowlist` | — | `true` | Refuse every peer that has not been approved, whatever token it holds. Loopback never pairs. See [The per-client allowlist](#the-per-client-allowlist). |
+| `pairingPath` | — | `/pair` | Where a not-yet-approved device posts its code. The only route reachable from the LAN without approval. |
+| `pairingTtlMs` | — | `600000` | How long a minted pairing code stays valid. |
 
 ## Session mapping
 
@@ -188,12 +191,13 @@ Exercised end-to-end against a running desktop profile:
 | `test/permission.test.mjs` | 53 assertions green — the code-confinement property is asserted negatively |
 | `test/model.test.mjs` | 36 assertions green — catalogue shaping, per-provider failure isolation, and selection validation |
 | `test/context.test.mjs` | 85 assertions green — the occupancy fold (including that an unmeasured context is `null`, not 0%), the `ManualCompactionError` code mapping, service resolution, and the route contract |
+| `test/clients.test.mjs` | 100 assertions green — an un-approved peer refused everything including the shell, the code never present in anything a remote peer can read, approval surviving a restart through `$DSH_HOME`, a dead code that expires instead of locking a device out forever, and the same phone recognised when a dual-stack socket respells it |
 | `test/recovery.test.mjs` | 34 assertions green — in-flight acquisition is shared per key (including by a reentrant caller), a failed key is freed, and a create that lost to a resume reports the real cause |
 | `test/browse.test.mjs` | 37 assertions green over real HTTP: the virtual root, relative single-root backwards compatibility, and the refusals — traversal, out-of-root absolute paths, and reading outside every root |
 | `test/setup.test.mjs` | 49 assertions green — the token-file fallback, and that `/setup` answers 403 to anything that is not loopback |
 | `test/integration.test.mjs` | 54 assertions green against a real `node:http` server mounting the real panel: the auth guard covers the new asset, the routes are actually wired, the cookie bootstrap preserves the popup's `id`/`view` while dropping the token, and the full handshake completes |
 
-393 assertions across eight suites, plus a standalone guard (`test/shell-guard.mjs`)
+493 assertions across nine suites, plus a standalone guard (`test/shell-guard.mjs`)
 for the panel's single-template shell.
 
 Still unverified: **how any of this renders on a real phone.** The server half of
@@ -431,6 +435,45 @@ this bridge's setup, so no selection of ours is coupled to it and flipping one
 would silently do nothing. The picker detects that case and says so instead of
 reporting a change that did not happen. Switch that one on the desktop, or start a
 fresh conversation.
+
+### The per-client allowlist
+
+The token is the only secret between the LAN and this machine, and a token that
+travels in a URL — a bookmark, a screenshot, a chat message, a shared clipboard —
+leaks silently. The allowlist makes that leak insufficient on its own: a peer that
+has never been approved is refused **everything**, panel, OpenAI face and approval
+console alike, until somebody at the machine reads a code off the loopback-only
+setup page and types it on that device. A leaked token then buys an attacker
+nothing until a human is standing at the computer.
+
+Loopback never pairs, so the machine running DSH never has to approve itself.
+
+**What it is not.** It is not a boundary against someone already on the LAN. ARP
+spoofing can impersonate an approved address, DHCP hands a phone a new address
+without asking, and a dual-stack or multi-homed device arrives under a different
+spelling each time. Approving an address approves whoever can claim it. What this
+defends against is the leaked token, and only that.
+
+**The ordering is deliberate.** The check runs *after* the token check and
+*before* every panel route including the slashless redirect. Serving the shell
+first would hand an un-approved device the whole page and gate only its data. And
+running it after the token means a pairing code is minted only for a device that
+has already proved it holds a token — otherwise anyone who merely guessed the port
+could put codes on the operator's screen.
+
+**The code is never readable from the device being approved.** It appears only in
+`/setup/state`, which is loopback-only, and never in the refusal the phone
+receives. It is also never persisted: a code lives in memory for its TTL, while
+the approval it produces is written to `$DSH_HOME/openai-bridge-clients.json`. A
+restart clears every un-approved device and keeps every approved one.
+
+**A wrong code is bounded in both directions.** Five attempts kill the code and
+it stays dead for its TTL — and then the TTL expires the whole entry, so the
+device's next request mints a fresh code. A lock that outlived its TTL would be a
+permanent lockout with nothing on the setup page to explain it, because that page
+only shows live entries.
+
+Devices are removed from the setup page, which rewrites the file immediately.
 
 ### The context meter, and compacting from the phone
 

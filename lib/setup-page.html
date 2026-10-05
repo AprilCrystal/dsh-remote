@@ -42,6 +42,13 @@
   .msg { margin-top:12px; font-size:13.5px; min-height:1.3em; }
   .msg.ok { color:#7ee787; }
   .msg.bad { color:#ff7b72; }
+  .code { font-family:ui-monospace,Consolas,"Courier New",monospace; font-size:30px;
+          font-weight:700; letter-spacing:.30em; padding:4px 0 4px 6px; cursor:pointer; }
+  .pend { border:1px solid var(--warn); border-radius:10px; padding:12px 14px; margin-bottom:10px; }
+  .pend.dead { border-color:var(--bad); }
+  .pend .who { font-size:13.5px; }
+  .pend .meta { color:var(--dim); font-size:12.5px; margin-top:6px; }
+  td.act { width:74px; text-align:right; }
   ol { margin:8px 0 0; padding-left:20px; }
   li { margin-bottom:5px; font-size:13.5px; }
 </style>
@@ -72,6 +79,15 @@
     </div>
     <div class="msg" id="msg"></div>
     <p class="note" id="tokenhint"></p>
+  </div>
+
+  <div class="card" id="clientcard">
+    <h2>设备白名单 <span id="clientpill" class="pill">读取中…</span></h2>
+    <p class="note">本机永远免验证。局域网上的设备第一次访问会被拦下，需要在这里读出验证码，然后在<b>那台设备上</b>填一次。验证码只在这个页面出现，手机端的接口永远拿不到它。</p>
+    <div id="pending"></div>
+    <table id="clients"></table>
+    <div class="msg" id="clientmsg"></div>
+    <p class="note" id="clienthint"></p>
   </div>
 
   <div class="card">
@@ -197,10 +213,130 @@
     text('selftest', 'http://127.0.0.1' + (state.port ? ':' + state.port : '') + state.panelPath + '/')
   }
 
+  function renderClients() {
+    var info = state.clientGate
+    var pill = el('clientpill')
+    if (!info) {
+      pill.textContent = '未启用'
+      pill.className = 'pill off'
+      el('pending').replaceChildren()
+      el('clients').replaceChildren()
+      text('clienthint', state.configured
+        ? '这个进程没有启用设备白名单：任何拿到令牌的设备都会被服务。'
+        : '插件还没有令牌、没有挂载，也就没有需要白名单的东西。先生成令牌。')
+      return
+    }
+    pill.textContent = info.enabled ? '已启用' : '已关闭'
+    pill.className = 'pill ' + (info.enabled ? 'on' : 'off')
+
+    var pend = el('pending')
+    var nodes = []
+    info.pending.forEach(function (entry) {
+      var box = document.createElement('div')
+      box.className = 'pend' + (entry.locked ? ' dead' : '')
+      var who = document.createElement('div')
+      who.className = 'who'
+      who.textContent = '新设备请求接入：' + entry.ip + (entry.label ? ' · ' + entry.label : '')
+      var code = document.createElement('div')
+      code.className = 'code'
+      code.title = '点一下全选'
+      code.textContent = entry.locked ? '已作废' : entry.code
+      if (!entry.locked) {
+        code.onclick = function () {
+          var range = document.createRange()
+          range.selectNodeContents(code)
+          var pick = window.getSelection()
+          pick.removeAllRanges()
+          pick.addRange(range)
+        }
+      }
+      var meta = document.createElement('div')
+      meta.className = 'meta'
+      var left = Math.max(0, Math.round((entry.expiresAt - Date.now()) / 60000))
+      meta.textContent = entry.locked
+        ? '错误次数太多，这个验证码已作废 —— 等它过期后，那台设备再访问一次就会生成新的。'
+        : '到 ' + new Date(entry.expiresAt).toLocaleTimeString() + ' 失效（约 ' + left + ' 分钟）。把那台设备上的验证码填掉。'
+      box.append(who, code, meta)
+      nodes.push(box)
+    })
+    pend.replaceChildren.apply(pend, nodes)
+
+    var table = el('clients')
+    if (info.clients.length === 0) {
+      var tr = document.createElement('tr')
+      var td = document.createElement('td')
+      td.colSpan = 3
+      td.style.color = 'var(--dim)'
+      td.textContent = '还没有已批准的设备。'
+      tr.appendChild(td)
+      table.replaceChildren(tr)
+    } else {
+      table.replaceChildren.apply(table, info.clients.map(function (client) {
+        var tr = document.createElement('tr')
+        var k = document.createElement('td')
+        k.className = 'k'
+        k.textContent = '已批准'
+        var v = document.createElement('td')
+        var line = document.createElement('div')
+        line.className = 'mono'
+        line.textContent = client.ip
+        var meta2 = document.createElement('div')
+        meta2.style.color = 'var(--dim)'
+        meta2.style.fontSize = '12.5px'
+        meta2.textContent = (client.label || '(没有设备信息)')
+          + (client.lastSeen ? ' · 最后访问 ' + new Date(client.lastSeen).toLocaleString() : '')
+        v.append(line, meta2)
+        var act = document.createElement('td')
+        act.className = 'act'
+        var drop = document.createElement('button')
+        drop.textContent = '移除'
+        drop.onclick = function () { forget(client.ip) }
+        act.appendChild(drop)
+        tr.append(k, v, act)
+        return tr
+      }))
+    }
+
+    text('clienthint', info.enabled
+      ? '白名单存在 ' + info.file + '。移除后那台设备需要重新配对。'
+      : '白名单已关闭（配置里 ipAllowlist: false），任何拿到令牌的设备都会被服务。')
+  }
+
+  function loadClients() {
+    return fetch(base + '/state', { cache: 'no-store' })
+      .then(function (res) { return res.json() })
+      .then(function (data) { state.clientGate = data.clientGate; renderClients() })
+      .catch(function () {})
+  }
+
+  function forget(ip) {
+    var msg = el('clientmsg')
+    msg.className = 'msg'
+    msg.textContent = '正在移除…'
+    fetch(base + '/clients/forget', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ ip: ip }),
+    })
+      .then(function (res) { return res.json().then(function (d) { return { ok: res.ok, data: d } }) })
+      .then(function (result) {
+        if (!result.ok) throw new Error(result.data.error || 'failed')
+        msg.className = 'msg ok'
+        msg.textContent = result.data.forgotten
+          ? '已移除 ' + ip + '，它下次访问要重新配对。'
+          : '没有这条记录。'
+        return loadClients()
+      })
+      .catch(function (error) {
+        msg.className = 'msg bad'
+        msg.textContent = '移除失败：' + error.message
+      })
+  }
+
   function load() {
     return fetch(base + '/state', { cache: 'no-store' })
       .then(function (res) { return res.json() })
-      .then(function (data) { state = data; render() })
+      .then(function (data) { state = data; render(); renderClients() })
       .catch(function () {
         text('status', '读取失败')
         el('status').className = 'pill off'
@@ -241,6 +377,10 @@
   }
 
   load()
+  // The pairing code has to appear while the operator is standing at the phone,
+  // so this card refreshes on its own. Only this card: re-rendering the whole
+  // page every few seconds would hide a token the operator just revealed.
+  setInterval(function () { if (!document.hidden) loadClients() }, 3000)
 })()
 </script>
 </body>

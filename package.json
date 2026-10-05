@@ -37,6 +37,7 @@
     "lib/model-ui.js",
     "lib/context-control.js",
     "lib/context-ui.js",
+    "lib/client-gate.js",
     "lib/setup.js",
     "lib/setup-page.html",
     "cordis.patch.yml",

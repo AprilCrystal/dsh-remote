@@ -59,3 +59,27 @@
         # Auto-open the authorization popup on this PC. If opening it fails, the
         # handshake still works and the popup URL is written to the host log.
         desktopPopup: true
+
+        # ── the per-client allowlist ─────────────────────────────────────────
+        # A token that travelled in a URL can leak without anyone noticing, so a
+        # leaked token must not be enough by itself. With this on, a peer that has
+        # never been approved is refused EVERYTHING — the panel, the OpenAI face,
+        # the approval console — until somebody at this machine reads the code on
+        # the setup page and types it on that device. Loopback never pairs.
+        #
+        # This is NOT a boundary against someone already on the LAN: ARP spoofing
+        # can impersonate an approved address, and DHCP hands a phone a new one
+        # without asking. It makes a leaked token insufficient, nothing more.
+        # `false` restores "whoever has the token is served".
+        ipAllowlist: true
+        # Where a not-yet-approved device posts its code. Must be reachable from
+        # the LAN, and it is the only route that is — its whole power is checking
+        # six digits against a code shown on this machine.
+        pairingPath: /pair
+        # How long a minted pairing code stays valid (milliseconds). Wrong codes
+        # are tolerated five times per code; the code then dies with it, and the
+        # device's next request mints a fresh one.
+        pairingTtlMs: 600000
+        # Approved devices live in $DSH_HOME/openai-bridge-clients.json, written
+        # when a device is approved and when one is removed from the setup page.
+
