@@ -50,6 +50,9 @@
       "patch": "./cordis.patch.yml"
     }
   },
+  "scripts": {
+    "test": "node test/run-all.mjs"
+  },
   "peerDependencies": {
     "@deepseek-ai/cordis": "~4.0.4"
   }

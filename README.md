@@ -213,13 +213,14 @@ Exercised end-to-end against a running desktop profile:
 | `test/output.test.mjs` | 31 assertions green — reasoning on its own callback and never on the OpenAI face, the fold built lazily, the stop route keeping queued input unless asked, a copy that admits when it could not copy, and that nothing above the composer is a scroll container (which is what let streamed output push the input down the page) |
 | `test/queue.test.mjs` | 34 assertions green — every refusal and the target default, the panel route's wiring, that insert appends without waking the driver, that send-now removes then re-sends, that the plugin keeps no queue of its own, and that a poll cannot close the keyboard mid-edit |
 | `test/fork.test.mjs` | 23 assertions green — the cut at a completed turn and never mid-turn, landing on the next turn boundary with trailing events left behind, clamping a seq that runs past the array, the route's wiring, that the child is seeded and parented, and that the source sandbox is NOT inherited |
+| `test/links.test.mjs` | 15 assertions green — a relative or rooted path is never turned into a link, what counts as a path and what does not, that a quoted path keeps its spaces, and that a URL containing `p://` is NOT mangled into a file chip |
 | `test/recovery.test.mjs` | 34 assertions green — in-flight acquisition is shared per key (including by a reentrant caller), a failed key is freed, and a create that lost to a resume reports the real cause |
 | `test/browse.test.mjs` | 37 assertions green over real HTTP: the virtual root, relative single-root backwards compatibility, and the refusals — traversal, out-of-root absolute paths, and reading outside every root |
 | `test/setup.test.mjs` | 56 assertions green — the token-file fallback, the served page's own script, and that `/setup` answers 403 to anything that is not loopback |
 | `test/questions.test.mjs` | 34 assertions green — the answer reaching the `user-questions/request` waterfall, a partial batch refused without resolving anything, a downstream refusal NOT ending the race, a desktop skip still counting as an answer, a question from another session still being shown, an abort ending the race rather than hanging, and an unchanged poll leaving the DOM alone so typing is not interrupted |
 | `test/integration.test.mjs` | 58 assertions green against a real `node:http` server mounting the real panel: the auth guard covers the new asset, the routes are actually wired, the cookie bootstrap preserves the popup's `id`/`view` while dropping the token, the full handshake completes, and every inline script the phone is actually served parses |
 
-653 assertions across thirteen suites, plus a standalone guard (`test/shell-guard.mjs`)
+668 assertions across fourteen suites, plus a standalone guard (`test/shell-guard.mjs`)
 for the panel's single-template shell.
 
 Still unverified: **how any of this renders on a real phone.** The server half of
