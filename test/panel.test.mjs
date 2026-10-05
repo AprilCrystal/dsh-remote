@@ -277,14 +277,18 @@ await check('serves a complete, uncorrupted HTML shell', async () => {
   assert.match(res.body, /id="hbtn"/u)
   assert.match(res.body, /id="drawer"/u)
   assert.match(res.body, /id="newchat"/u)
-  // Scroll buttons live with the composer, one per end, each hidden when it has
-  // nowhere to go.
-  // These are assigned from the script, so match the assignment strings.
-  assert.match(res.body, /'scrollbtns'/u)
-  assert.match(res.body, /'totop'/u)
-  assert.match(res.body, /'tobottom'/u)
-  assert.match(res.body, /#scrollbtns button\.on \{ visibility:visible/u)
-  assert.doesNotMatch(res.body, /id="htop"/u, 'the header top button moved to the composer')
+  // The secondary actions — permissions, model, file reference, and both scroll
+  // ends — all live behind ONE bottom-right button now. Two header chips used to
+  // squeeze the conversation title down to an ellipsis, so their absence from the
+  // header is part of the contract, not an accident.
+  assert.match(res.body, /panel-fab\.js/u)
+  assert.match(res.body, /__bridgeScroll/u)
+  assert.match(res.body, /__bridgePickFile/u)
+  assert.match(res.body, /__bridgeInsertText/u)
+  assert.doesNotMatch(res.body, /'scrollbtns'/u, 'the in-composer scroll row is gone')
+  assert.doesNotMatch(res.body, /id="permchip"/u, 'the permission chip left the header')
+  assert.doesNotMatch(res.body, /id="modelchip"/u, 'the model chip left the header')
+  assert.doesNotMatch(res.body, /id="htop"/u, 'the header top button moved out of the header')
   // The composer must be pinned to the bottom even for a short transcript.
   assert.match(res.body, /margin-top:auto/u)
   assert.match(res.body, /min-height:100dvh/u)

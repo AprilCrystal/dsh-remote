@@ -15,6 +15,7 @@
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join as joinPath } from 'node:path'
+import vm from 'node:vm'
 import { installPanel } from '../lib/panel.js'
 
 let passed = 0
@@ -142,6 +143,27 @@ try {
     ok('an authenticated request gets the script', authed.status === 200, `status ${authed.status}`)
     ok('it is typed as JavaScript', String(authed.headers.get('content-type')).startsWith('text/javascript'))
     ok('the script wires the options route', authed.text.includes('action=options'))
+  }
+
+  group('the action cluster')
+
+  {
+    const panel = await hit(live.origin, '/bridge/', { cookie: COOKIE })
+    ok('the shell references the cluster', panel.text.includes('panel-fab.js'))
+
+    const fab = await hit(live.origin, '/bridge/panel-fab.js', { cookie: COOKIE })
+    ok('the cluster is served', fab.status === 200, `status ${fab.status}`)
+    ok('it is typed as JavaScript', String(fab.headers.get('content-type')).startsWith('text/javascript'))
+    let parseError = null
+    try {
+      new vm.Script(fab.text)
+    } catch (error) {
+      parseError = error
+    }
+    ok('the cluster script parses as JavaScript', parseError === null, String(parseError))
+    ok('it registers the file-reference button', fab.text.includes('__bridgePickFile'))
+    ok('it measures the composer it has to clear', fab.text.includes('.composer'))
+    ok('it exposes the registration surface', fab.text.includes('__bridgeFab'))
   }
 
   group('the fallthrough still 404s')

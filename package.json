@@ -29,6 +29,7 @@
   "files": [
     "lib/index.js",
     "lib/panel.js",
+    "lib/panel-fab.js",
     "lib/http-util.js",
     "lib/permission-gate.js",
     "lib/permission-ui.js",

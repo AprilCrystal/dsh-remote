@@ -264,6 +264,25 @@ surface and the LAN link is cleartext. `desktopPopup` spawns the machine's
 default browser via `rundll32 url.dll,FileProtocolHandler`; if that fails the
 handshake still works and the popup URL is written to the host log.
 
+### The bottom-right action cluster
+
+Everything secondary lives behind one button in the corner: the permission
+preset, the model and its reasoning effort, **引用文件** (insert a path from this
+machine into the composer), and the two scroll ends. These used to be header
+chips, which squeezed the conversation title down to an ellipsis the moment there
+were two of them.
+
+The cluster measures the composer on every render and offsets itself by its
+height, because the composer is sticky at the bottom of the viewport — so the
+buttons never end up underneath the input. Each scroll button stays hidden at the
+end it already sits at, and the stack collapses as soon as you scroll.
+
+**引用文件** reuses the file browser in a picker mode: the header changes to
+选择文件, tapping a file hands its path back, and the path is appended to the
+composer. Directories still navigate normally. Nothing is uploaded and nothing is
+written — this only puts a path into the message, which the agent then reads
+through its own tools under the ordinary sandbox and approval rules.
+
 ### How a transcript renders
 
 Each message is split into typed blocks against the harness's own
@@ -351,6 +370,12 @@ the list.
 Unlike the permission switch, **this needs no code from the desktop.** Choosing a
 model cannot widen the sandbox, and it is trivially reversible, so gating it would
 only add friction.
+
+Picking a model that declares reasoning opens a second step for its **reasoning
+effort**, including an explicit "adapter default" that clears an inherited one.
+The effort rides on the same selection as the model — it is the same
+`reasoningEffort` field the desktop's own picker sets — and the cluster button
+shows it next to the model name.
 
 A switch is applied to the *next* step, never mid-step. The bridge installs a
 mutable selection onto each agent it creates and mirrors the harness's own
