@@ -285,6 +285,10 @@ await check('serves a complete, uncorrupted HTML shell', async () => {
   assert.match(res.body, /__bridgeScroll/u)
   assert.match(res.body, /__bridgePickFile/u)
   assert.match(res.body, /__bridgeInsertText/u)
+  // A JS failure on a phone is otherwise invisible, which makes a broken button
+  // look like a button that was never built. The page has to say so out loud.
+  assert.match(res.body, /'jserr'/u)
+  assert.match(res.body, /unhandledrejection/u)
   assert.doesNotMatch(res.body, /'scrollbtns'/u, 'the in-composer scroll row is gone')
   assert.doesNotMatch(res.body, /id="permchip"/u, 'the permission chip left the header')
   assert.doesNotMatch(res.body, /id="modelchip"/u, 'the model chip left the header')
