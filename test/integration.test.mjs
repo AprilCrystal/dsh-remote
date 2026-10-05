@@ -284,6 +284,29 @@ try {
       String(live.service.current({ key: 'session-integration' })))
   }
 
+  group('the shell the phone actually receives')
+
+  {
+    const panel = await hit(live.origin, '/bridge/', { cookie: COOKIE })
+    const scripts = [...panel.text.matchAll(/<script>([\s\S]*?)<\/script>/gu)].map((match) => match[1])
+    ok('the shell carries its own inline scripts', scripts.length >= 1, String(scripts.length))
+    // The panel's whole client lives in ONE tagged template on the host, and a
+    // tagged template silently swallows an escape it does not recognise. Parsing
+    // what the phone is actually served is the only check that sees that class of
+    // typo, because the host source parses perfectly either way.
+    let parseError = null
+    for (const script of scripts) {
+      try {
+        new vm.Script(script)
+      } catch (error) {
+        parseError = error
+      }
+    }
+    ok('every inline script parses as JavaScript', parseError === null, String(parseError))
+    ok('the question card ships with it', panel.text.includes('questionCard'))
+    ok('and can answer one', panel.text.includes('api/answer'))
+  }
+
   await live.close()
   live = undefined
 } finally {

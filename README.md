@@ -211,9 +211,10 @@ Exercised end-to-end against a running desktop profile:
 | `test/recovery.test.mjs` | 34 assertions green — in-flight acquisition is shared per key (including by a reentrant caller), a failed key is freed, and a create that lost to a resume reports the real cause |
 | `test/browse.test.mjs` | 37 assertions green over real HTTP: the virtual root, relative single-root backwards compatibility, and the refusals — traversal, out-of-root absolute paths, and reading outside every root |
 | `test/setup.test.mjs` | 56 assertions green — the token-file fallback, the served page's own script, and that `/setup` answers 403 to anything that is not loopback |
-| `test/integration.test.mjs` | 54 assertions green against a real `node:http` server mounting the real panel: the auth guard covers the new asset, the routes are actually wired, the cookie bootstrap preserves the popup's `id`/`view` while dropping the token, and the full handshake completes |
+| `test/questions.test.mjs` | 27 assertions green — the answer reaching the `user-questions/request` waterfall, a partial batch refused without resolving anything, a downstream refusal NOT ending the race, and an abort ending it rather than hanging |
+| `test/integration.test.mjs` | 58 assertions green against a real `node:http` server mounting the real panel: the auth guard covers the new asset, the routes are actually wired, the cookie bootstrap preserves the popup's `id`/`view` while dropping the token, the full handshake completes, and every inline script the phone is actually served parses |
 
-527 assertions across nine suites, plus a standalone guard (`test/shell-guard.mjs`)
+558 assertions across ten suites, plus a standalone guard (`test/shell-guard.mjs`)
 for the panel's single-template shell.
 
 Still unverified: **how any of this renders on a real phone.** The server half of
@@ -285,6 +286,42 @@ Pending approvals are **polled** at 2s rather than pushed: they are rare, the
 latency is irrelevant, and polling needs no long-lived connection to survive a
 phone sleeping. It is also why Chatbox can never show one — it speaks the OpenAI
 protocol, which has no approval channel at all.
+
+### Answering a question from the phone
+
+`ask_user_question` **parks the turn** until something answers. The desktop GUI is
+one answerer; the panel is now another, in the same place an approval appears —
+replacing the composer, because the turn is stopped and the answer belongs where
+the reader's attention already is. Options render as buttons (toggling when the
+question is `multiSelect`), each question also takes free text, and the whole
+request is submitted as one batch.
+
+The race is the approval race with one deliberate difference. A question travels
+a **waterfall**, and the caller treats *any* rejection as "nobody could ask" — so
+a downstream answerer that refuses (no desktop GUI attached, which is the normal
+case for a phone-only deployment) must not settle the race while the phone is
+still deciding. This race therefore resolves on the first **success**, and a
+failure is only surfaced once both sides have failed:
+
+```js
+const lose = (error) => {
+  if (error?.code === 'ASK_ABORTED') { fail(error); return }   // terminal for both
+  if (++failed === 2) fail(firstFailure)
+}
+```
+
+An **abort** is the exception, and it is terminal for both sides: once the caller
+has given up, no answerer can help, and waiting for the other one would hang the
+turn rather than end it. That case is a test, not a hope — the first version of
+this code waited forever for a phone that was never going to answer.
+
+A batch must answer **every** question it was given: a partial batch is refused
+with a 400 and resolves nothing, because the tool's contract is one answer per
+question and a hole there is worse than a retry.
+
+Because the turn is parked, a question nobody hears about is a turn that never
+finishes. That is why the listener is registered unconditionally rather than only
+when some feature flag is on.
 
 ### Switching the permission preset from the phone
 
