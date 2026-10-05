@@ -252,6 +252,14 @@ group('routing and the asset')
   }
   ok('the picker script parses as JavaScript', parseError === null, String(parseError))
   ok('the picker calls the model API', asset.body.includes('api/model'))
+
+  // The shipping DeepSeek adapters declare exactly off/low/high/max. An unlabelled
+  // id is not fatal — it falls back to the raw string — but it reads as a bug on a
+  // phone, so the four that actually occur are pinned here.
+  const labels = /var EFFORT_LABELS = \{([\s\S]*?)\}/u.exec(asset.body)?.[1] ?? ''
+  ok('effort labels cover the ids the shipping adapters declare',
+    ['off', 'low', 'high', 'max'].every((id) => labels.includes(id + ':')),
+    labels.slice(0, 140))
 }
 
 group('a host with no LLM registry')
