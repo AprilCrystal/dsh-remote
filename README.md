@@ -210,13 +210,14 @@ Exercised end-to-end against a running desktop profile:
 | `test/clients.test.mjs` | 122 assertions green — an un-approved peer refused everything including the shell, the code never present in anything a remote peer can read, approval surviving a restart through `$DSH_HOME`, a dead code that expires instead of locking a device out forever, a manual replacement clearing that lock, one popup for a LAN sweep rather than one per address, and the same phone recognised when a dual-stack socket respells it |
 | `test/output.test.mjs` | 23 assertions green — reasoning on its own callback and never on the OpenAI face, the fold built lazily, the stop route keeping queued input unless asked, and a copy that admits when it could not copy |
 | `test/queue.test.mjs` | 28 assertions green — every refusal and the target default, the panel route's wiring, that insert appends without waking the driver, that send-now removes then re-sends, that the plugin keeps no queue of its own, and that a poll cannot close the keyboard mid-edit |
+| `test/fork.test.mjs` | 23 assertions green — the cut at a completed turn and never mid-turn, landing on the next turn boundary with trailing events left behind, clamping a seq that runs past the array, the route's wiring, that the child is seeded and parented, and that the source sandbox is NOT inherited |
 | `test/recovery.test.mjs` | 34 assertions green — in-flight acquisition is shared per key (including by a reentrant caller), a failed key is freed, and a create that lost to a resume reports the real cause |
 | `test/browse.test.mjs` | 37 assertions green over real HTTP: the virtual root, relative single-root backwards compatibility, and the refusals — traversal, out-of-root absolute paths, and reading outside every root |
 | `test/setup.test.mjs` | 56 assertions green — the token-file fallback, the served page's own script, and that `/setup` answers 403 to anything that is not loopback |
 | `test/questions.test.mjs` | 34 assertions green — the answer reaching the `user-questions/request` waterfall, a partial batch refused without resolving anything, a downstream refusal NOT ending the race, a desktop skip still counting as an answer, a question from another session still being shown, an abort ending the race rather than hanging, and an unchanged poll leaving the DOM alone so typing is not interrupted |
 | `test/integration.test.mjs` | 58 assertions green against a real `node:http` server mounting the real panel: the auth guard covers the new asset, the routes are actually wired, the cookie bootstrap preserves the popup's `id`/`view` while dropping the token, the full handshake completes, and every inline script the phone is actually served parses |
 
-616 assertions across twelve suites, plus a standalone guard (`test/shell-guard.mjs`)
+639 assertions across thirteen suites, plus a standalone guard (`test/shell-guard.mjs`)
 for the panel's single-template shell.
 
 Still unverified: **how any of this renders on a real phone.** The server half of
@@ -437,6 +438,36 @@ one attribute text can reach, so link schemes are whitelisted to
 User turns are restricted to `source.kind === 'user'`; injected context
 (runtime snapshots, tool notices) is filtered out rather than rendered, because
 it would otherwise drown the conversation.
+
+### Forking a conversation
+
+Each row in the drawer carries a 分支 button. It cuts the conversation at its
+**last completed turn** and creates a new session seeded with that prefix, then
+opens it.
+
+The recipe is mirrored from `dsh-api-session-controller`, which owns the canonical
+version and cannot be imported here — the same three steps it takes: cut at a
+completed turn boundary, create the child with `seed` + `inheritedEventCount` +
+`meta.parentSession`, and attach it to a workspace, without which the desktop
+sidebar never groups it at all.
+
+**The cut is the part that matters**, so it lives in a pure exported function,
+`planForkCut`, with its own tests. Only a completed turn is safe: seeding a child
+with half an exchange gives it a request with no reply or a tool call with no
+result, and the symptom appears much later as an agent confused about its own
+history. The cut then advances to the next `turn/start`, so a title, a delivery
+marker or a checkpoint logged after the last turn stays with the **source**. A test
+found a real defect here: the cut was not clamped, and a `turn/end` can carry a seq
+higher than its array position (a compaction replacement lands a fresh high-seq
+node at an older position), which made the "exclusive index" a lie even though
+`slice` forgave it.
+
+**A fork does not inherit the source's sandbox.** A fork is a new session this
+bridge created, so the configured `permissionPreset` is pinned before its first
+tool call. Inheriting would let a wider preset propagate by duplication; the phone
+can request a change on the child explicitly if it needs one. The child *does*
+follow the source's **agent preset**, so a forked conversation keeps the
+composition it was already having.
 
 ### Inserting a message without sending it
 
