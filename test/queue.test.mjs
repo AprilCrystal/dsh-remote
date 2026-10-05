@@ -287,7 +287,44 @@ await check('a poll cannot close the keyboard while an edit is being typed', () 
   // tray's key, so an unchanged poll leaves the textarea alone.
   assert.match(shell, /const key = JSON\.stringify\(\[items\.map\(\(item\) => item\.id \+ '\|' \+ item\.target \+ '\|' \+ item\.text\), queueEditing\]\);/u)
   assert.match(shell, /area\.oninput = \(\) => \{ queueEditText = area\.value; \};/u)
-  assert.match(shell, /if \(key === queueKey\) return;/u)
+  assert.match(shell, /if \(key !== queueKey\) \{/u)
+})
+
+await check('the tray says whether anything will actually happen', () => {
+  // The count alone was misleading: staged while the agent is IDLE, a queued
+  // message sits there forever because nothing wakes the driver to consume it,
+  // which reads as a hang rather than as a decision. That is what "it just froze"
+  // turned out to be.
+  assert.match(shell, /pendingQueue\.running\n\s+\? '正在跑，这一轮结束后轮到它们'\n\s+: '空闲中 —— 点「立即发送」才会发出去'/u)
+})
+
+await check('the running state is not part of the rebuild key', () => {
+  // It flips on its own, and a rebuild on that flip would close the keyboard of an
+  // edit in progress — the exact bug the key exists to prevent.
+  assert.match(shell, /if \(queueHead !== null\) queueHead\.textContent = queueHeadText\(items\.length\);/u)
+})
+
+await check('the host reports whether a turn is running', () => {
+  assert.match(wire, /running: agent\.status === 'running',/u)
+})
+
+await check('a queue failure is reported, never swallowed', () => {
+  // The first version caught every failure with an empty handler, which made a
+  // refusal indistinguishable from a button that does not work: tap 排队, nothing
+  // appears, and there is no way to tell whether the request failed, the server
+  // refused it, or the tap never landed.
+  assert.match(shell, /async function queueRequest\(payload\)/u)
+  assert.match(shell, /failure = data\.error \|\| \('HTTP ' \+ String\(res\.status\)\);/u)
+  assert.match(shell, /note\.textContent = '排队失败：' \+ queueError;/u)
+})
+
+await check('a failed insert gives the typed text back', () => {
+  assert.match(shell, /currentComposer\.input\.value = payload\.text;/u)
+})
+
+await check('both the composer and the tray go through it', () => {
+  assert.match(shell, /void queueRequest\(\{ session: sessionId, action: 'insert', target, text \}\)/u)
+  assert.match(shell, /await queueRequest\(\{ session: currentSessionId, action, \.\.\.payload \}\);/u)
 })
 
 await check('a fresh composer refills the tray', () => {

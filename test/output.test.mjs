@@ -156,7 +156,43 @@ await check('the summary stops claiming to be live when the turn ends', () => {
 })
 
 await check('the reasoning frame is handled in the stream reader', () => {
-  assert.match(shell, /else if \(payload\.reasoning !== undefined\) \{ thinking \+= payload\.reasoning; paintThinking\(\); \}/u)
+  assert.match(shell, /else if \(payload\.reasoning !== undefined\) \{ thinking \+= payload\.reasoning; appendThinking\(payload\.reasoning\); \}/u)
+})
+
+console.log('streaming does not do quadratic work')
+
+await check('the thinking body streams PLAIN TEXT, one node per delta', () => {
+  // Re-parsing the whole chain of thought on every delta is quadratic, and a long
+  // one made expanding the fold crawl on a phone. Appending a text node is O(1).
+  assert.match(shell, /thinkingBody\.append\(document\.createTextNode\(piece\)\);/u)
+  assert.doesNotMatch(shell, /thinkingBody\.replaceChildren\(renderMarkdown\(thinking\)\);/u)
+})
+
+await check('markdown is rendered exactly once, when the turn ends', () => {
+  assert.match(shell, /const settleThinking = \(\) => \{/u)
+  assert.match(shell, /md\.append\(renderMarkdown\(thinking\)\);/u)
+  assert.match(shell, /settleThinking\(\);\n  if \(paintTimer !== null\)/u)
+})
+
+await check('the visible reply is repainted on a timer, not per delta', () => {
+  // Same class of problem: `body.replaceChildren(renderMarkdown(accumulated))` for
+  // every delta is quadratic in the length of the answer.
+  assert.match(shell, /const wait = 150 - \(Date\.now\(\) - lastPaint\);/u)
+  assert.match(shell, /if \(paintTimer === null\) paintTimer = setTimeout\(paintNow, wait\);/u)
+})
+
+await check('the last deltas still reach the screen', () => {
+  // A throttle that drops the tail would show a truncated answer.
+  assert.match(shell, /if \(accumulated !== ''\) paintNow\(\);/u)
+})
+
+await check('a folded block is parsed on first open, not while closed', () => {
+  // A transcript can hold several long reasoning blocks; building them all into
+  // nodes while they are all closed is pure cost, and it is what made expanding
+  // one feel broken.
+  assert.match(shell, /let built = false;/u)
+  assert.match(shell, /fold\.addEventListener\('toggle', \(\) => \{ if \(fold\.open\) build\(\); \}\);/u)
+  assert.match(shell, /const build = \(\) => \{\n\s+if \(built\) return;/u)
 })
 
 console.log('stopping a turn')
