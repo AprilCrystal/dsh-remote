@@ -1,0 +1,45 @@
+{
+  "name": "dsh-openai-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "OpenAI-compatible HTTP endpoint plus a mobile panel for the DeepSeek Harness: drive a session from a phone, read any session's transcript, browse and stage files, answer approvals, and change the sandbox preset behind a code that is shown on the desktop.",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AprilCrystal/dsh-remote.git"
+  },
+  "homepage": "https://github.com/AprilCrystal/dsh-remote#readme",
+  "bugs": {
+    "url": "https://github.com/AprilCrystal/dsh-remote/issues"
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "cordis",
+    "openai",
+    "chatbox",
+    "mobile"
+  ],
+  "exports": {
+    ".": "./lib/index.js",
+    "./panel": "./lib/panel.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/panel.js",
+    "lib/permission-gate.js",
+    "lib/permission-ui.js",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "~4.0.4"
+  }
+}

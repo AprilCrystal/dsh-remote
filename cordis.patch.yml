@@ -1,0 +1,50 @@
+# This package's bundle layer.
+#
+# `dsh plugin add dsh-openai-bridge` appends these rows to the profile's
+# composition, because package.json declares `dsh.bundle.patch`.
+#
+# The route mounts on the EXISTING webserver, so it inherits that server's bind
+# (127.0.0.1 by default — loopback only until a deployment deliberately binds
+# 0.0.0.0). Bearer authentication is unconditional.
+- insert:
+    - id: openai-bridge
+      name: dsh-openai-bridge
+      config:
+        # Empty string disables the bridge entirely. Set a real secret before
+        # exposing this server beyond loopback.
+        token: !!js process.env.DSH_OPENAI_BRIDGE_TOKEN ?? ''
+        # Session workspace root for conversations this bridge creates.
+        cwd: !!js process.env.DSH_OPENAI_BRIDGE_CWD ?? process.cwd()
+        # Permission preset pinned onto each NEWLY CREATED session. It is
+        # deliberately not re-pinned on later turns: doing that would silently
+        # reset a preset the operator changed from the panel mid-conversation.
+        permissionPreset: !!js process.env.DSH_OPENAI_BRIDGE_PERMISSION ?? 'read-only'
+        agentPreset: !!js process.env.DSH_OPENAI_BRIDGE_PRESET ?? 'standard'
+        # Browse root for the /bridge panel. Defaults to `cwd` above (the
+        # workspace). Widen deliberately — e.g. 'C:\\' — to browse the whole
+        # disk. Reads are unrestricted either way; this only bounds the panel.
+        fileRoot: !!js process.env.DSH_OPENAI_BRIDGE_FILEROOT ?? undefined
+        # Where the mobile panel mounts.
+        panelPath: /bridge
+        # Which sessions the panel may answer approvals for: 'all' lets it answer
+        # for any session it can open, 'bridge' narrows it to sessions in `cwd`.
+        approvalScope: all
+
+        # ── phone-triggered permission switching ──────────────────────────────
+        # false removes the switch completely: the header chip never appears and
+        # the whole permission API answers 404.
+        permissionSwitch: true
+        # Presets the phone may REQUEST. `danger-full-access` is excluded on
+        # purpose: widening the sandbox to the whole machine is the one change
+        # that cannot be walked back from a phone if it is granted by mistake.
+        permissionPresets:
+          - read-only
+          - workspace-write
+        # Leave empty and the server mints a one-time 6-digit code, shown ONLY on
+        # the desktop popup. Set a value to use a fixed code that you choose.
+        authorizationCode: !!js process.env.DSH_OPENAI_BRIDGE_AUTH_CODE ?? ''
+        # How long a pending authorization stays confirmable (milliseconds).
+        authorizationTtlMs: 180000
+        # Auto-open the authorization popup on this PC. If opening it fails, the
+        # handshake still works and the popup URL is written to the host log.
+        desktopPopup: true
