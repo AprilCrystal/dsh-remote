@@ -83,7 +83,7 @@ override:
 | `permissionPreset` | `DSH_OPENAI_BRIDGE_PERMISSION` | `read-only` | Preset pinned onto each **newly created** session. It is deliberately *not* re-pinned on later turns: doing that would silently reset a preset you changed. |
 | `agentPreset` | `DSH_OPENAI_BRIDGE_PRESET` | `standard` | Agent preset each session is composed from. |
 | `panelPath` | — | `/bridge` | Where the mobile panel mounts. |
-| `fileRoot` | — | `cwd` | The only tree the file browser can reach. |
+| `fileRoot` | `DSH_OPENAI_BRIDGE_FILEROOT` | `cwd` | Browse roots for the panel. A string is one root, a list is several, `'*'` is every fixed drive. See [Browsing beyond the workspace](#browsing-beyond-the-workspace). |
 | `approvalScope` | — | `all` | `all` lets the panel answer approvals for any session; `bridge` narrows it to sessions in `cwd`. |
 | `permissionSwitch` | — | `true` | `false` removes the phone's permission switch entirely — no button, and the API 404s. |
 | `permissionPresets` | — | `['read-only','workspace-write']` | Which presets the phone may request. `danger-full-access` is excluded on purpose. |
@@ -151,11 +151,16 @@ Exercised end-to-end against a running desktop profile:
 | Typed transcript blocks, live | `{"text":138,"reasoning":182,"tool-call":285}` on one session — 467 of 605 blocks fold away |
 | `test/panel.test.mjs` | 45 assertions green; **47 when run elevated**, where the two symlink-containment assertions execute instead of skipping |
 | `test/permission.test.mjs` | 53 assertions green — the code-confinement property is asserted negatively |
+| `test/model.test.mjs` | 35 assertions green — catalogue shaping, per-provider failure isolation, and selection validation |
+| `test/browse.test.mjs` | 37 assertions green over real HTTP: the virtual root, relative single-root backwards compatibility, and the refusals — traversal, out-of-root absolute paths, and reading outside every root |
 | `test/integration.test.mjs` | 37 assertions green against a real `node:http` server mounting the real panel: the auth guard covers the new asset, the routes are actually wired, the cookie bootstrap preserves the popup's `id`/`view` while dropping the token, and the full handshake completes |
 
+207 assertions across five suites, plus a standalone guard for the panel's
+single-template shell.
+
 Still unverified: **how any of this renders on a real phone.** The server half of
-both the approval card and the permission dialog is proven; the browser half has
-never been seen on a device.
+the approval card, the permission dialog, the model picker and the file browser is
+proven; the browser half has never been seen on a device.
 
 Two bugs were caught by the live API rather than by reading source, and are
 worth remembering: `readTitleSnapshot` returns a `{ session, title }` wrapper
@@ -295,27 +300,71 @@ Browsing and every read are harmless. **Upload is not**: it is a direct disk
 write from an HTTP handler, which bypasses the DSH sandbox, the approval
 waterfall, and the audit log.
 
-So uploads are confined to exactly one directory, `<fileRoot>/_inbox/`, and the
+So uploads are confined to exactly one directory, `<cwd>/_inbox/`, and the
 panel can write nowhere else. Everything else on the machine — including the
-agent editing any file — still goes through the `read-only` sandbox and its
-approval prompt. Treat `_inbox` as the one hole, and remember it sits outside
-the approval trail.
+agent editing any file — still goes through the sandbox and its approval prompt.
+Treat `_inbox` as the one hole, and remember it sits outside the approval trail.
 
-Path containment is enforced twice: `..` and absolute paths are rejected
-against the resolved root, and every target is `realpath`-checked afterwards so
-a symlink cannot point outward.
+Path containment is enforced twice: `..` and out-of-scope absolute paths are
+rejected against the resolved roots, and every target is `realpath`-checked
+afterwards so a symlink cannot point outward.
 
 ### Browsing beyond the workspace
 
-`fileRoot` bounds the browser and defaults to `cwd`. To browse the whole disk,
-add this to the installed `cordis.patch.yml` under the row's `config`:
+`fileRoot` is the browse allow-list and defaults to `cwd`. It takes three forms:
+
+| Value | Meaning |
+|---|---|
+| `'E:\work'` | one root. Paths stay **relative** to it, exactly as they always did. |
+| `['C:\', 'E:\work']` | several roots. A virtual root lists them; paths become absolute. |
+| `'*'` | every fixed drive, enumerated live, so a drive mounted later needs no restart. |
 
 ```yaml
-        fileRoot: 'C:\'
+        fileRoot: '*'
 ```
 
-Reads are unrestricted for the agent either way; this only bounds what the
-panel exposes through one token.
+Containment is unchanged in all three forms: `..` is refused textually, an
+absolute path is accepted only when it lands inside **some** root, and the target
+is `realpath`-checked afterwards so a symlink cannot point outward. The single
+root form deliberately still refuses absolute paths, so an existing deployment
+keeps the tighter behaviour it was configured with.
+
+**This is the one setting worth pausing over.** Reads are already unrestricted
+for the agent, so `'*'` does not widen what the *agent* can reach — it widens what
+one bearer token, over a cleartext LAN link, can enumerate and download from a
+phone. `read-only` protects integrity, not confidentiality, and nothing here
+changes that. Scope it to a list if you want the browser useful without handing
+over the whole machine.
+
+Uploads do **not** follow the browse roots: they always land in `<cwd>/_inbox/`,
+because with `'*'` the first root is a drive letter and `C:\_inbox` is not
+somewhere to write.
+
+### Switching the model from the phone
+
+The header carries a second chip showing the model the session is using. Tapping
+it lists real provider groups from the live LLM registry — with each provider's
+models, their descriptions, and their reasoning efforts when the adapter declares
+any. One provider that cannot enumerate is reported in place rather than blanking
+the list.
+
+Unlike the permission switch, **this needs no code from the desktop.** Choosing a
+model cannot widen the sandbox, and it is trivially reversible, so gating it would
+only add friction.
+
+A switch is applied to the *next* step, never mid-step. The bridge installs a
+mutable selection onto each agent it creates and mirrors the harness's own
+`installModelSelection`: prompt assembly snapshots the selection before
+delegating, and request routing applies that snapshot, so the prompt and the
+request can never disagree about which model is in play. That also means the
+desktop GUI picks the change up, because its model indicator reads the same
+request headers.
+
+**One honest limitation.** A session the desktop already holds *live* never ran
+this bridge's setup, so no selection of ours is coupled to it and flipping one
+would silently do nothing. The picker detects that case and says so instead of
+reporting a change that did not happen. Switch that one on the desktop, or start a
+fresh conversation.
 
 ## Backing it out
 

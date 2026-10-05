@@ -29,8 +29,11 @@
   "files": [
     "lib/index.js",
     "lib/panel.js",
+    "lib/http-util.js",
     "lib/permission-gate.js",
     "lib/permission-ui.js",
+    "lib/model-control.js",
+    "lib/model-ui.js",
     "cordis.patch.yml",
     "README.md"
   ],

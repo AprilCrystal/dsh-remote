@@ -20,9 +20,11 @@
         # reset a preset the operator changed from the panel mid-conversation.
         permissionPreset: !!js process.env.DSH_OPENAI_BRIDGE_PERMISSION ?? 'read-only'
         agentPreset: !!js process.env.DSH_OPENAI_BRIDGE_PRESET ?? 'standard'
-        # Browse root for the /bridge panel. Defaults to `cwd` above (the
-        # workspace). Widen deliberately — e.g. 'C:\\' — to browse the whole
-        # disk. Reads are unrestricted either way; this only bounds the panel.
+        # Browse allow-list for the /bridge panel. A string is one root (paths
+        # stay relative to it); a list is several (a virtual root lists them);
+        # the literal '*' is every fixed drive, enumerated live. Reads are
+        # unrestricted for the agent either way — this only bounds what the panel
+        # exposes through one token, over a cleartext LAN link.
         fileRoot: !!js process.env.DSH_OPENAI_BRIDGE_FILEROOT ?? undefined
         # Where the mobile panel mounts.
         panelPath: /bridge
