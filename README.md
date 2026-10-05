@@ -209,13 +209,14 @@ Exercised end-to-end against a running desktop profile:
 | `test/context.test.mjs` | 85 assertions green — the occupancy fold (including that an unmeasured context is `null`, not 0%), the `ManualCompactionError` code mapping, service resolution, and the route contract |
 | `test/clients.test.mjs` | 122 assertions green — an un-approved peer refused everything including the shell, the code never present in anything a remote peer can read, approval surviving a restart through `$DSH_HOME`, a dead code that expires instead of locking a device out forever, a manual replacement clearing that lock, one popup for a LAN sweep rather than one per address, and the same phone recognised when a dual-stack socket respells it |
 | `test/output.test.mjs` | 23 assertions green — reasoning on its own callback and never on the OpenAI face, the fold built lazily, the stop route keeping queued input unless asked, and a copy that admits when it could not copy |
+| `test/queue.test.mjs` | 28 assertions green — every refusal and the target default, the panel route's wiring, that insert appends without waking the driver, that send-now removes then re-sends, that the plugin keeps no queue of its own, and that a poll cannot close the keyboard mid-edit |
 | `test/recovery.test.mjs` | 34 assertions green — in-flight acquisition is shared per key (including by a reentrant caller), a failed key is freed, and a create that lost to a resume reports the real cause |
 | `test/browse.test.mjs` | 37 assertions green over real HTTP: the virtual root, relative single-root backwards compatibility, and the refusals — traversal, out-of-root absolute paths, and reading outside every root |
 | `test/setup.test.mjs` | 56 assertions green — the token-file fallback, the served page's own script, and that `/setup` answers 403 to anything that is not loopback |
 | `test/questions.test.mjs` | 34 assertions green — the answer reaching the `user-questions/request` waterfall, a partial batch refused without resolving anything, a downstream refusal NOT ending the race, a desktop skip still counting as an answer, a question from another session still being shown, an abort ending the race rather than hanging, and an unchanged poll leaving the DOM alone so typing is not interrupted |
 | `test/integration.test.mjs` | 58 assertions green against a real `node:http` server mounting the real panel: the auth guard covers the new asset, the routes are actually wired, the cookie bootstrap preserves the popup's `id`/`view` while dropping the token, the full handshake completes, and every inline script the phone is actually served parses |
 
-588 assertions across eleven suites, plus a standalone guard (`test/shell-guard.mjs`)
+616 assertions across twelve suites, plus a standalone guard (`test/shell-guard.mjs`)
 for the panel's single-template shell.
 
 Still unverified: **how any of this renders on a real phone.** The server half of
@@ -436,6 +437,39 @@ one attribute text can reach, so link schemes are whitelisted to
 User turns are restricted to `source.kind === 'user'`; injected context
 (runtime snapshots, tool notices) is filtered out rather than rendered, because
 it would otherwise drown the conversation.
+
+### Inserting a message without sending it
+
+The composer has two buttons next to 发送, and they are not the same thing:
+
+| Button | Boundary | What it does |
+|---|---|---|
+| 排队 | `next-turn` | Waits its turn. Safe, and the default. |
+| 插话 | `next-step` | Steers the turn that is **already running**, at its next step. |
+
+Both **insert without sending**: nothing wakes the driver, so the message sits in
+the queue, visible in the tray above the input, until somebody sends it. Each tray
+row carries 立即发送 / 编辑 / 撤销.
+
+**"Syncs with the desktop" is not implemented here, and that is the point.**
+`agent.inbox` is the same projection the desktop GUI reads, and every mutation it
+exposes — `append`, `replace`, `remove` — is a durable `agent/inbox/spliced`
+session event. The panel reads and writes that one list. A private queue inside
+this plugin would have to be mirrored by hand and would drift the first time the
+desktop changed something the phone could not see, so a test asserts the absence
+of one, alongside the `agent.inbox` calls it uses instead.
+
+**立即发送** removes the message from wherever it sits and re-sends it waking the
+driver, which is what "send this now" means. It has to be that pair: the inbox
+refuses a duplicate identity, and the harness exposes no bare "wake".
+
+**Editing happens in place** so the reader keeps the queue position they chose, and
+`replace` is what preserves it. The text being typed is deliberately **not** part
+of the tray's rebuild key — the same discipline the question card needed after the
+poll closed the keyboard mid-word.
+
+A conversation with no live agent is refused with a 409 rather than silently
+queueing, because a queue nobody can see is worse than an error.
 
 ### Watching a turn: folded thinking, copy, stop
 
