@@ -42,6 +42,7 @@
     "lib/setup-page.html",
     "cordis.patch.yml",
     "README.md",
+    "PANEL.zh.md",
     "GUIDE.zh.md"
   ],
   "dsh": {

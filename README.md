@@ -8,6 +8,8 @@ The package is named `dsh-openai-bridge`; its repository is
 
 **中文使用指南 → [GUIDE.zh.md](GUIDE.zh.md)** — 面向使用者（怎么登录、各个按钮干什么、权限验证码、引用文件与上传的区别、安全边界、常见问题）。本文件面向开发者。
 
+**手机面板功能详解 → [PANEL.zh.md](PANEL.zh.md)** — 思考/复制/停止、插入消息与双端同步、分支对话、问答卡片：怎么用、边界在哪、哪些**还没在真机上验证过**。
+
 ## Install
 
 ```sh
