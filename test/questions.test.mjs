@@ -309,24 +309,54 @@ await check('an abort is surfaced even when downstream already refused', async (
   await assert.rejects(() => outcome, /aborted/u)
 })
 
-await check('an aborted question cannot hang the turn forever', async () => {
-  const { question } = mount({ approvalCwd: root })
-  const controller = new AbortController()
-  const outcome = question.handler(ask({ signal: controller.signal }), silent)
-  controller.abort()
-  await assert.rejects(() => outcome, /aborted/u)
+console.log('whose question is it')
+
+await check('a question is shown even when it belongs to another session', async () => {
+  // The observed failure. The question was pending on the host for the whole time
+  // the user waited, and the phone never showed it because it was filed under a
+  // session the phone was not displaying. A hidden approval leaves the desktop
+  // prompt doing its job; a hidden question leaves a turn parked with nothing on
+  // the device to explain it, so questions are not filtered by session at all.
+  const shell = readFileSync(new URL('../lib/panel.js', import.meta.url), 'utf8')
+  assert.match(shell, /const otherQuestions = pendingQuestions\.filter/u)
+  assert.match(shell, /for \(const item of otherQuestions\) slots\.append\(questionCard\(item\)\)/u)
+  assert.match(shell, /const blocked = mine\.length > 0 \|\| pendingQuestions\.length > 0/u)
 })
 
-await check('an abort after the answer resolves nothing twice', async () => {
+await check('the card says which session it came from', () => {
+  const shell = readFileSync(new URL('../lib/panel.js', import.meta.url), 'utf8')
+  assert.match(shell, /来自会话 ' \+ String\(item\.sessionId\)/u)
+})
+
+await check('the poll reports which session the device is showing', async () => {
+  const { route } = mount({ approvalCwd: root })
+  const res = await get(route, '/bridge/api/questions?session=session-abc')
+  assert.equal(res.json.youAre, 'session-abc')
+})
+
+await check('a render fault cannot kill the poll loop', () => {
+  // The loop is the only way a parked turn becomes visible, so a render fault
+  // ending it would look exactly like "nothing is waiting".
+  const shell = readFileSync(new URL('../lib/panel.js', import.meta.url), 'utf8')
+  assert.match(shell, /try \{ renderSlots\(\); \} catch/u)
+})
+
+await check('the history still records where a question went', async () => {
   const { route, question } = mount({ approvalCwd: root })
-  const controller = new AbortController()
-  const outcome = question.handler(ask({ signal: controller.signal }), silent)
-  const id = await idOf(route)
-  await post(route, '/bridge/api/answer', { id, answers: [{ id: 'q1', selected: ['A'] }] })
-  controller.abort()
-  assert.deepEqual(await outcome, { answers: [{ id: 'q1', selected: ['A'] }] })
+  void question.handler(ask(), async () => ({ answers: [{ id: 'q1', selected: [] }] }))
+  await settle()
+  const listed = await get(route, '/bridge/api/questions')
+  assert.deepEqual(listed.json.recent.map((entry) => entry.event), ['offered', 'downstream-answer'])
 })
 
+await check('a skipped question on the desktop is still an answer', async () => {
+  // The desktop's skip button resolves with an all-blank batch. That is a real
+  // human decision, so it must settle the request: treating it as "no human" would
+  // keep a turn parked on the phone forever after someone deliberately skipped.
+  const { question } = mount({ approvalCwd: root })
+  const outcome = question.handler(ask(), async () => ({ answers: [{ id: 'q1', selected: [] }] }))
+  assert.deepEqual(await outcome, { answers: [{ id: 'q1', selected: [] }] })
+})
 console.log('scope')
 
 await check('a session the panel does not own is passed straight through', async () => {
@@ -367,7 +397,7 @@ await check('it posts to the answer route and polls the question route', () => {
 
 await check('the composer is replaced while a question waits', () => {
   const shell = readFileSync(new URL('../lib/panel.js', import.meta.url), 'utf8')
-  assert.match(shell, /const blocked = mine\.length > 0 \|\| myQuestions\.length > 0/u)
+  assert.match(shell, /const blocked = mine\.length > 0 \|\| pendingQuestions\.length > 0/u)
   assert.match(shell, /input\.hidden = blocked/u)
 })
 

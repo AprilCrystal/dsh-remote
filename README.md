@@ -211,10 +211,10 @@ Exercised end-to-end against a running desktop profile:
 | `test/recovery.test.mjs` | 34 assertions green — in-flight acquisition is shared per key (including by a reentrant caller), a failed key is freed, and a create that lost to a resume reports the real cause |
 | `test/browse.test.mjs` | 37 assertions green over real HTTP: the virtual root, relative single-root backwards compatibility, and the refusals — traversal, out-of-root absolute paths, and reading outside every root |
 | `test/setup.test.mjs` | 56 assertions green — the token-file fallback, the served page's own script, and that `/setup` answers 403 to anything that is not loopback |
-| `test/questions.test.mjs` | 27 assertions green — the answer reaching the `user-questions/request` waterfall, a partial batch refused without resolving anything, a downstream refusal NOT ending the race, and an abort ending it rather than hanging |
+| `test/questions.test.mjs` | 31 assertions green — the answer reaching the `user-questions/request` waterfall, a partial batch refused without resolving anything, a downstream refusal NOT ending the race, a desktop skip still counting as an answer, a question from another session still being shown, and an abort ending the race rather than hanging |
 | `test/integration.test.mjs` | 58 assertions green against a real `node:http` server mounting the real panel: the auth guard covers the new asset, the routes are actually wired, the cookie bootstrap preserves the popup's `id`/`view` while dropping the token, the full handshake completes, and every inline script the phone is actually served parses |
 
-558 assertions across ten suites, plus a standalone guard (`test/shell-guard.mjs`)
+562 assertions across ten suites, plus a standalone guard (`test/shell-guard.mjs`)
 for the panel's single-template shell.
 
 Still unverified: **how any of this renders on a real phone.** The server half of
@@ -314,6 +314,33 @@ An **abort** is the exception, and it is terminal for both sides: once the calle
 has given up, no answerer can help, and waiting for the other one would hang the
 turn rather than end it. That case is a test, not a hope — the first version of
 this code waited forever for a phone that was never going to answer.
+
+**Questions are not filtered by session, and that asymmetry with approvals is
+deliberate.** An approval that is not shown leaves the desktop prompt doing its
+job; a question that is not shown leaves a **turn parked** with nothing on the
+device to explain it. The card for another session carries a button to jump
+there, so nothing is ambiguous — and a session id that fails to match for any
+reason can no longer swallow the only surface that could have answered.
+
+This is the fix for the first live failure of this feature: a question sat
+pending on the host the whole time the user waited, and the phone never showed
+it, because it was filed under a session the phone was not displaying. The user
+eventually found it on the desktop and pressed **skip**.
+
+Two consequences of that incident are worth keeping:
+
+- **A skip is an answer.** It resolves with an all-blank batch, which the tool's
+  contract permits. An earlier version of this code treated an entirely blank
+  batch as "no human behind it" and refused to settle — which would have kept a
+  turn parked on the phone forever after somebody deliberately skipped. The real
+  fault was the hidden card, not the blank answer, and guessing at the answer was
+  the wrong place to fix it.
+- **The poll is guarded.** `renderSlots()` runs inside a `try`, because that loop
+  is the only way a parked turn ever becomes visible; a render fault ending it
+  would look exactly like "nothing is waiting". `/bridge/api/questions` also
+  returns a short `recent` history — `offered`, `panel-answer`,
+  `downstream-answer`, `aborted`, `failed` — plus `youAre`, the session the
+  caller says it is showing, so a mismatch is readable rather than inferred.
 
 A batch must answer **every** question it was given: a partial batch is refused
 with a 400 and resolves nothing, because the tool's contract is one answer per
