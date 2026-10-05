@@ -267,6 +267,31 @@ await check('the fallback runs inside the click, not after a promise', () => {
   assert.match(shell, /return Promise\.resolve\(legacyCopy\(text\)\);/u)
 })
 
+console.log('the composer stays at the bottom of the screen')
+
+await check('it is pinned by both sticky and the flex column', () => {
+  // Both halves are needed, which is why neither can be dropped: sticky holds it
+  // once the transcript is taller than the screen, and margin-top:auto holds it
+  // while the transcript is shorter, where sticky has no slack to work with.
+  assert.match(shell, /\.composer \{ position:sticky; bottom:0; margin-top:auto;/u)
+})
+
+await check('nothing above it is a scroll container', () => {
+  // The reported bug, encoded. overflow-x:hidden forces the OTHER axis to auto, so
+  // the content column silently became a SCROLL CONTAINER; its height grew with its
+  // content, so bottom:0 sticky had no slack, never engaged, and every streamed
+  // token pushed the input further down the page.
+  assert.match(shell, /html \{ overflow-x:hidden; \}/u)
+  assert.doesNotMatch(shell, /main \{[^}]*overflow/u)
+  assert.doesNotMatch(shell, /body \{[^}]*overflow/u)
+})
+
+await check('and the reason stays written down', () => {
+  // So the next reader does not tidy the guard back onto the content column and
+  // reintroduce this with no test able to see it.
+  assert.match(shell, /becomes a SCROLL CONTAINER/u)
+})
+
 await rm(root, { recursive: true, force: true })
 
 console.log(`\n${passed} passed, ${failed} failed`)

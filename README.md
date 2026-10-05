@@ -210,7 +210,7 @@ Exercised end-to-end against a running desktop profile:
 | `test/model.test.mjs` | 41 assertions green — catalogue shaping, per-provider failure isolation, selection validation, and that the selection is never installed from the context `setup` receives |
 | `test/context.test.mjs` | 85 assertions green — the occupancy fold (including that an unmeasured context is `null`, not 0%), the `ManualCompactionError` code mapping, service resolution, and the route contract |
 | `test/clients.test.mjs` | 122 assertions green — an un-approved peer refused everything including the shell, the code never present in anything a remote peer can read, approval surviving a restart through `$DSH_HOME`, a dead code that expires instead of locking a device out forever, a manual replacement clearing that lock, one popup for a LAN sweep rather than one per address, and the same phone recognised when a dual-stack socket respells it |
-| `test/output.test.mjs` | 23 assertions green — reasoning on its own callback and never on the OpenAI face, the fold built lazily, the stop route keeping queued input unless asked, and a copy that admits when it could not copy |
+| `test/output.test.mjs` | 26 assertions green — reasoning on its own callback and never on the OpenAI face, the fold built lazily, the stop route keeping queued input unless asked, a copy that admits when it could not copy, and that nothing above the composer is a scroll container (which is what let streamed output push the input down the page) |
 | `test/queue.test.mjs` | 28 assertions green — every refusal and the target default, the panel route's wiring, that insert appends without waking the driver, that send-now removes then re-sends, that the plugin keeps no queue of its own, and that a poll cannot close the keyboard mid-edit |
 | `test/fork.test.mjs` | 23 assertions green — the cut at a completed turn and never mid-turn, landing on the next turn boundary with trailing events left behind, clamping a seq that runs past the array, the route's wiring, that the child is seeded and parented, and that the source sandbox is NOT inherited |
 | `test/recovery.test.mjs` | 34 assertions green — in-flight acquisition is shared per key (including by a reentrant caller), a failed key is freed, and a create that lost to a resume reports the real cause |
@@ -219,7 +219,7 @@ Exercised end-to-end against a running desktop profile:
 | `test/questions.test.mjs` | 34 assertions green — the answer reaching the `user-questions/request` waterfall, a partial batch refused without resolving anything, a downstream refusal NOT ending the race, a desktop skip still counting as an answer, a question from another session still being shown, an abort ending the race rather than hanging, and an unchanged poll leaving the DOM alone so typing is not interrupted |
 | `test/integration.test.mjs` | 58 assertions green against a real `node:http` server mounting the real panel: the auth guard covers the new asset, the routes are actually wired, the cookie bootstrap preserves the popup's `id`/`view` while dropping the token, the full handshake completes, and every inline script the phone is actually served parses |
 
-639 assertions across thirteen suites, plus a standalone guard (`test/shell-guard.mjs`)
+642 assertions across thirteen suites, plus a standalone guard (`test/shell-guard.mjs`)
 for the panel's single-template shell.
 
 Still unverified: **how any of this renders on a real phone.** The server half of
