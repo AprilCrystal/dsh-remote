@@ -15,6 +15,7 @@
  * file chip would be a worse bug than the one being fixed.
  */
 
+import { readNormalized } from './source.mjs'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
@@ -32,7 +33,7 @@ function check(name, fn) {
   }
 }
 
-const source = readFileSync(new URL('../lib/panel.js', import.meta.url), 'utf8')
+const source = readNormalized(new URL('../lib/panel.js', import.meta.url), 'utf8')
 
 /** Pull one regex literal out of the served shell and compile it for real. */
 function literal(name) {

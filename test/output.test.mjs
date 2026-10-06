@@ -14,6 +14,7 @@
  *     separate request rather than something the button does silently.
  */
 
+import { readNormalized } from './source.mjs'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { mkdtemp, rm } from 'node:fs/promises'
@@ -37,8 +38,8 @@ async function check(name, fn) {
 
 const TOKEN = 'output-token'
 const root = await mkdtemp(join(tmpdir(), 'output-test-'))
-const wire = readFileSync(new URL('../lib/index.js', import.meta.url), 'utf8')
-const shell = readFileSync(new URL('../lib/panel.js', import.meta.url), 'utf8')
+const wire = readNormalized(new URL('../lib/index.js', import.meta.url), 'utf8')
+const shell = readNormalized(new URL('../lib/panel.js', import.meta.url), 'utf8')
 
 /* ── harness ──────────────────────────────────────────────────────────────── */
 

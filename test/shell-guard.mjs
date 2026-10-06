@@ -12,10 +12,11 @@
  * Exit: 0 when clean, 1 with the offending lines listed.
  */
 
+import { readNormalized } from './source.mjs'
 import { readFileSync } from 'node:fs'
 
 const BT = String.fromCharCode(96)
-const source = readFileSync(new URL('../lib/panel.js', import.meta.url), 'utf8')
+const source = readNormalized(new URL('../lib/panel.js', import.meta.url), 'utf8')
 
 const open = source.indexOf('html' + BT + '<!doctype html>')
 if (open === -1) {

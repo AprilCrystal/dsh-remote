@@ -1,2 +1,12 @@
-﻿* text=auto eol=lf
+# Line endings are LF everywhere, whatever core.autocrlf is set to on the machine
+# that checked the repository out. The suites match multi-line source patterns
+# with \n, and a CRLF checkout made seven of them fail for a reason that had
+# nothing to do with the code under test.
+* text=auto eol=lf
+*.js   text eol=lf
+*.mjs  text eol=lf
+*.json text eol=lf
+*.md   text eol=lf
+*.yml  text eol=lf
+*.html text eol=lf
 *.png binary

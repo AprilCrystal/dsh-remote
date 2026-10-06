@@ -14,6 +14,7 @@
  * approval race it otherwise mirrors.
  */
 
+import { readNormalized } from './source.mjs'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { mkdtemp, rm } from 'node:fs/promises'
@@ -317,14 +318,14 @@ await check('a question is shown even when it belongs to another session', async
   // session the phone was not displaying. A hidden approval leaves the desktop
   // prompt doing its job; a hidden question leaves a turn parked with nothing on
   // the device to explain it, so questions are not filtered by session at all.
-  const shell = readFileSync(new URL('../lib/panel.js', import.meta.url), 'utf8')
+  const shell = readNormalized(new URL('../lib/panel.js', import.meta.url), 'utf8')
   assert.match(shell, /const otherQuestions = pendingQuestions\.filter/u)
   assert.match(shell, /for \(const item of otherQuestions\) slots\.append\(questionCard\(item\)\)/u)
   assert.match(shell, /const blocked = mine\.length > 0 \|\| pendingQuestions\.length > 0/u)
 })
 
 await check('the card says which session it came from', () => {
-  const shell = readFileSync(new URL('../lib/panel.js', import.meta.url), 'utf8')
+  const shell = readNormalized(new URL('../lib/panel.js', import.meta.url), 'utf8')
   assert.match(shell, /来自会话 ' \+ String\(item\.sessionId\)/u)
 })
 
@@ -337,7 +338,7 @@ await check('the poll reports which session the device is showing', async () => 
 await check('a render fault cannot kill the poll loop', () => {
   // The loop is the only way a parked turn becomes visible, so a render fault
   // ending it would look exactly like "nothing is waiting".
-  const shell = readFileSync(new URL('../lib/panel.js', import.meta.url), 'utf8')
+  const shell = readNormalized(new URL('../lib/panel.js', import.meta.url), 'utf8')
   assert.match(shell, /try \{ renderSlots\(\); \} catch/u)
 })
 
@@ -382,7 +383,7 @@ await check('with no scope configured every session is offered', async () => {
 console.log('the card the phone renders')
 
 await check('the shell renders a question card with a custom field', () => {
-  const shell = readFileSync(new URL('../lib/panel.js', import.meta.url), 'utf8')
+  const shell = readNormalized(new URL('../lib/panel.js', import.meta.url), 'utf8')
   assert.match(shell, /function questionCard\(/u)
   assert.match(shell, /class="qcustom"|'qcustom'/u)
   assert.match(shell, /也可以自己写/u)
@@ -390,13 +391,13 @@ await check('the shell renders a question card with a custom field', () => {
 })
 
 await check('it posts to the answer route and polls the question route', () => {
-  const shell = readFileSync(new URL('../lib/panel.js', import.meta.url), 'utf8')
+  const shell = readNormalized(new URL('../lib/panel.js', import.meta.url), 'utf8')
   assert.match(shell, /fetch\('api\/answer'/u)
   assert.match(shell, /api\/questions/u)
 })
 
 await check('the composer is replaced while a question waits', () => {
-  const shell = readFileSync(new URL('../lib/panel.js', import.meta.url), 'utf8')
+  const shell = readNormalized(new URL('../lib/panel.js', import.meta.url), 'utf8')
   assert.match(shell, /const blocked = mine\.length > 0 \|\| pendingQuestions\.length > 0/u)
   assert.match(shell, /input\.hidden = blocked/u)
 })
@@ -404,14 +405,14 @@ await check('the composer is replaced while a question waits', () => {
 await check('it opens no native dialog', () => {
   // A confirm()/alert() in an in-app webview is the classic silent no-op, and
   // this panel deliberately owns its own controls.
-  const shell = readFileSync(new URL('../lib/panel.js', import.meta.url), 'utf8')
+  const shell = readNormalized(new URL('../lib/panel.js', import.meta.url), 'utf8')
   const start = shell.indexOf('html`<!doctype html>')
   const body = shell.slice(start, shell.indexOf('</html>`', start))
   assert.doesNotMatch(body, /\b(window\.)?(confirm|alert|prompt)\s*\(/u)
 })
 
 await check('a stale draft cannot re-submit an answered question', () => {
-  const shell = readFileSync(new URL('../lib/panel.js', import.meta.url), 'utf8')
+  const shell = readNormalized(new URL('../lib/panel.js', import.meta.url), 'utf8')
   assert.match(shell, /for \(const key of Array\.from\(questionDraft\.keys\(\)\)\) if \(!live\.has\(key\)\) questionDraft\.delete\(key\)/u)
 })
 
@@ -422,7 +423,7 @@ await check('an unchanged poll does not rebuild the cards', () => {
   // poll runs every two seconds and replaceChildren destroys the focused input,
   // which on a phone dismisses the keyboard mid-word. The in-place update inside a
   // card is no defence, because the POLL is what rebuilds.
-  const shell = readFileSync(new URL('../lib/panel.js', import.meta.url), 'utf8')
+  const shell = readNormalized(new URL('../lib/panel.js', import.meta.url), 'utf8')
   assert.match(shell, /const key = JSON\.stringify\(\[/u)
   assert.match(shell, /if \(key !== slotsKey\) \{/u)
   assert.match(shell, /let slotsKey = null;/u)
@@ -431,12 +432,12 @@ await check('an unchanged poll does not rebuild the cards', () => {
 await check('a new composer always fills itself', () => {
   // A fresh slots element with a matching key would otherwise decide there is
   // nothing to do and stay empty forever.
-  const shell = readFileSync(new URL('../lib/panel.js', import.meta.url), 'utf8')
+  const shell = readNormalized(new URL('../lib/panel.js', import.meta.url), 'utf8')
   assert.match(shell, /currentComposer = \{[\s\S]{0,320}?slotsKey = null;/u)
 })
 
 await check('a rebuild that does land carries the caret over', () => {
-  const shell = readFileSync(new URL('../lib/panel.js', import.meta.url), 'utf8')
+  const shell = readNormalized(new URL('../lib/panel.js', import.meta.url), 'utf8')
   assert.match(shell, /custom\.dataset\.q = question\.id;/u)
   assert.match(shell, /slots\.querySelector\('\[data-q="' \+ carried\.q \+ '"\]'\)/u)
 })
