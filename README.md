@@ -61,12 +61,37 @@ What replaced it:
 
 | Was | Is now |
 |---|---|
-| `import('@deepseek-ai/dsh-llm')` + `createUserMessage` + `agent.followup` | `sessionController.prompt({ sessionId, mode, content })` — the same admission path the desktop composer uses, and it takes plain text |
+| `import('@deepseek-ai/dsh-llm')` + `createUserMessage` + `agent.followup` | `agent.followup(createLocalUserMessage(text))` — the same call, with the message built locally |
 | `inbox.replace(id, newMessage)` with a freshly built message | `sessionController.updateQueue({ action: { kind: 'edit', content } })` — takes content, keeps the identity and the queue position |
 | `inbox.remove(id)` | `sessionController.updateQueue({ action: { kind: 'remove' } })` |
 | — | `sessionController.updateQueue({ action: { kind: 'steer' } })` — a new 转插话 button, for free |
 
-**One place still builds a message**, because staging a message without waking the
+### Why turn submission does not go through the controller
+
+It was changed to `sessionController.prompt(...)` first, on the reasoning that the
+controller is the same admission path the desktop composer uses. That shipped and
+broke every turn:
+
+```
+[错误] Cannot read properties of undefined (reading 'throwIfAborted')
+```
+
+`prompt` takes a **required second argument** — `prompt(request, signal)` — and its
+wrapper begins with `signal.throwIfAborted()` with no optional chaining
+(`packages/api/session-controller/src/index.ts:330`). One argument means an
+undefined signal, and the throw happens before any admission work.
+
+So submission went back to the agent's own API, with a locally built message. The
+reasoning is not "the controller is wrong": it is that **what the controller adds
+over `followup` here is small** — `ensureAgent` already resumes the session and
+this bridge carries no attachments — while `followup` is the path that has been
+working in the field, and the turn path cannot be exercised from a test process. A
+test now asserts that `prompt(` is not called at all, and says why.
+
+`updateQueue` is still used, and deliberately: it takes **one** argument and
+returns synchronously, so it does not share that contract.
+
+**One place builds a message**, because staging a message without waking the
 driver is not something the controller offers — that is the deliberate difference
 between 排队 and 发送. It is mirrored exactly rather than guessed:
 `createUserMessage` is `createMessage({...input, role:'user'})`, `createMessage` is
