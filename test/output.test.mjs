@@ -309,6 +309,22 @@ await check('the fallback runs inside the click, not after a promise', () => {
   assert.match(shell, /return Promise\.resolve\(legacyCopy\(text\)\);/u)
 })
 
+console.log('arriving at a conversation')
+
+await check('it lands on the NEWEST message', () => {
+  // Reported: switching conversations opened at the earliest message. The guard
+  // inside scrollToBottom belongs to updates into a transcript somebody is reading;
+  // on arrival there is no reading position to protect, and window.scrollY still
+  // holds the previous view's value, so the guard was false essentially always.
+  assert.match(shell, /view\.append\(composer\);\n\s+\/\/ FORCED, because this is arrival[\s\S]{0,320}?scrollToBottom\(true\);/u)
+})
+
+await check('but a streamed delta still refuses to yank the reader away', () => {
+  // The other half, asserted so the fix cannot be taken too far: the repaint that
+  // runs while a reply streams has to stay unforced.
+  assert.match(shell, /const paintNow = \(\) => \{\n\s+paintTimer = null;\n\s+lastPaint = Date\.now\(\);\n\s+body\.replaceChildren\(renderMarkdown\(accumulated\)\);\n\s+scrollToBottom\(\);/u)
+})
+
 console.log('the composer stays at the bottom of the screen')
 
 await check('it is pinned by both sticky and the flex column', () => {
