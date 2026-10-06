@@ -8,6 +8,8 @@ The package is named `dsh-openai-bridge`; its repository is
 
 **中文使用指南 → [GUIDE.zh.md](GUIDE.zh.md)** — 面向使用者（怎么登录、各个按钮干什么、权限验证码、引用文件与上传的区别、安全边界、常见问题）。本文件面向开发者。
 
+**部署与配置记录 → [SETUP.zh.md](SETUP.zh.md)** — 一台 Windows 机器上**实际跑通**的配置过程：为什么必须给整个 HTTP 服务换绑、令牌生成后为什么必须重启、防火墙「按程序 vs 按端口」与 Public/Private 的坑。含开发这边的逐条核对结果。
+
 **手机面板功能详解 → [PANEL.zh.md](PANEL.zh.md)** — 思考/复制/停止、插入消息与双端同步、分支对话、问答卡片：怎么用、边界在哪、哪些**还没在真机上验证过**。
 
 ## Install
