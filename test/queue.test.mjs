@@ -286,13 +286,20 @@ await check('every mirrored message gets its own identity', () => {
 await check('a DSH without the controller is a diagnosable 503, not a crash', () => {
   // Read through ctx.get and deliberately NOT injected: a build without it must
   // still load this plugin and answer with something actionable.
-  assert.match(wire, /这个 DSH 版本没有提供 sessionController，本插件提交不了消息。升级 DSH 即可。/u)
-  assert.match(wire, /typeof controller\.prompt !== 'function'/u)
+  assert.match(wire, /这个 DSH 版本没有提供 sessionController，本插件改不了排队里的内容。升级 DSH 即可。/u)
+  assert.match(wire, /typeof controller\.updateQueue !== 'function'/u)
 })
 
-await check('a turn is submitted as text, through the same path the desktop uses', () => {
-  assert.match(wire, /await controllerFor\(\)\.prompt\(\{\n\s+requestId: randomUUID\(\),/u)
-  assert.match(wire, /sessionId: String\(agent\.session\.id\),\n\s+mode: 'queue',/u)
+await check('a turn is submitted through the agent, not through the controller', () => {
+  // The controller's prompt(request, signal) takes a REQUIRED signal, and its
+  // wrapper calls signal.throwIfAborted() unconditionally. Calling it with one
+  // argument threw "Cannot read properties of undefined (reading 'throwIfAborted')"
+  // on EVERY turn. The agent's own follow-up API has no such contract and is the
+  // path that has been working in the field, so submission stays there and the
+  // controller is used only for queue mutation.
+  assert.match(wire, /agent\.followup\(createLocalUserMessage\(text\)\)/u)
+  assert.doesNotMatch(wire, /controllerFor\(\)\.prompt/u)
+  assert.doesNotMatch(wire, /\.prompt\(\{/u)
 })
 
 await check('a queued message can be turned into steering', () => {
