@@ -16,12 +16,12 @@
  */
 
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { installPanel } from '../lib/panel.js'
-import { planQueueAction } from '../lib/index.js'
+import { createLocalUserMessage, planQueueAction } from '../lib/index.js'
 
 let passed = 0
 let failed = 0
@@ -235,8 +235,79 @@ await check('the queue is the harness inbox, not a copy of it', () => {
   assert.match(wire, /agent\.inbox\.nextTurn/u)
   assert.match(wire, /agent\.inbox\.nextStep/u)
   assert.match(wire, /agent\.inbox\.append\(plan\.target, message\)/u)
-  assert.match(wire, /agent\.inbox\.replace\(found\.message\.id, replacement\)/u)
+  // Edit, remove and steer go through the session controller's own queue
+  // mutation, which takes CONTENT for an edit rather than a message — so those
+  // three need no message builder at all, and an edit keeps its identity.
+  assert.match(wire, /controllerFor\(\)\.updateQueue\(\{ sessionId, itemId: found\.message\.id, action: mutation \}\)/u)
+  assert.match(wire, /\{ kind: 'edit', content: \[\{ type: 'text', text: plan\.text \}\] \}/u)
+  assert.match(wire, /: plan\.kind === 'drop' \? \{ kind: 'remove' \} : \{ kind: 'steer' \}/u)
   assert.match(wire, /agent\.inbox\.remove\(found\.message\.id\)/u)
+})
+
+await check('nothing in the plugin imports a harness package', () => {
+  // THE bug this fixes: `await import('@deepseek-ai/dsh-llm')` resolved only
+  // because DSH happened to have put the package in a node_modules directory above
+  // the plugin's own. On a second machine it did not, and the entire send path
+  // died with "Cannot find package". A bare harness specifier must never come
+  // back, in ANY file — so this scans the whole directory rather than a list that
+  // would go stale the moment a file is added.
+  const files = readdirSync(new URL('../lib/', import.meta.url)).filter((name) => name.endsWith('.js'))
+  assert.ok(files.length > 5, `only found ${String(files.length)} lib files to scan`)
+  for (const name of files) {
+    const source = readFileSync(new URL('../lib/' + name, import.meta.url), 'utf8')
+    assert.doesNotMatch(source, /import\(\s*['"]@deepseek-ai\//u, `${name} dynamically imports a harness package`)
+    assert.doesNotMatch(source, /from\s+['"]@deepseek-ai\//u, `${name} statically imports a harness package`)
+    assert.doesNotMatch(source, /require\(\s*['"]@deepseek-ai\//u, `${name} requires a harness package`)
+  }
+})
+
+await check('what replaced it is mirrored exactly, and frozen', () => {
+  // `createMessage` is freezeMessage({...input, id}); Message has exactly four
+  // fields. The freeze is not decoration: a message the harness could still mutate
+  // would behave differently from every other message in the same log.
+  const message = createLocalUserMessage('hello', () => 'fixed-id')
+  assert.deepEqual(message, {
+    id: 'fixed-id',
+    role: 'user',
+    content: [{ type: 'text', text: 'hello' }],
+    source: { kind: 'user' },
+  })
+  assert.ok(Object.isFrozen(message))
+  assert.ok(Object.isFrozen(message.content))
+  assert.ok(Object.isFrozen(message.content[0]))
+  assert.ok(Object.isFrozen(message.source))
+})
+
+await check('every mirrored message gets its own identity', () => {
+  assert.notEqual(createLocalUserMessage('a').id, createLocalUserMessage('a').id)
+})
+
+await check('a DSH without the controller is a diagnosable 503, not a crash', () => {
+  // Read through ctx.get and deliberately NOT injected: a build without it must
+  // still load this plugin and answer with something actionable.
+  assert.match(wire, /这个 DSH 版本没有提供 sessionController，本插件提交不了消息。升级 DSH 即可。/u)
+  assert.match(wire, /typeof controller\.prompt !== 'function'/u)
+})
+
+await check('a turn is submitted as text, through the same path the desktop uses', () => {
+  assert.match(wire, /await controllerFor\(\)\.prompt\(\{\n\s+requestId: randomUUID\(\),/u)
+  assert.match(wire, /sessionId: String\(agent\.session\.id\),\n\s+mode: 'queue',/u)
+})
+
+await check('a queued message can be turned into steering', () => {
+  // The controller owns this mutation, so the phone offers it rather than
+  // reimplementing it — and only in the one direction that means anything.
+  assert.match(shell, /if \(item\.target === 'next-turn'\) \{\n\s+const steer = el\('button', null, '转插话'\);/u)
+  assert.match(shell, /steer\.onclick = \(\) => void queueAct\('steer', \{ id: item\.id \}\);/u)
+})
+
+await check('turning a queued message into steering is offered, once', () => {
+  assert.match(wire, /if \(found\.target === 'next-step'\) \{\n\s+throw Object\.assign\(new Error\('这条已经是「插话」了。'\), \{ status: 409 \}\)/u)
+  assert.equal(planQueueAction('steer', { id: 's1' }, locateOver(one)).kind, 'steer')
+  assert.throws(
+    () => planQueueAction('steer', { id: 's1' }, () => ({ target: 'next-step' })),
+    (error) => error.status === 409,
+  )
 })
 
 await check('the plugin keeps no queue of its own', () => {

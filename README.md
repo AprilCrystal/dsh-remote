@@ -39,6 +39,48 @@ unconfigured plugin still cannot touch the approval flow.
 The token may be set here, or left to `$DSH_HOME/openai-bridge.token`, which the
 setup page writes for you. A configured token always wins.
 
+## The one rule that keeps it portable
+
+**This plugin imports nothing from the harness.** Every capability is reached
+through `ctx.get(...)` or through a service the harness already put in the context.
+
+That rule was broken in exactly two places, both calling
+`await import('@deepseek-ai/dsh-llm')` to reach `createUserMessage`. It worked
+here and it took the **whole send path** down on a second machine:
+
+```
+[错误] Cannot find package '@deepseek-ai/dsh-llm' imported from index.js
+```
+
+A bare harness specifier resolves only if DSH happens to have placed that package
+in a `node_modules` directory above the plugin's own — which depends on how DSH was
+installed, and is an accident rather than a guarantee. On this machine the chain
+happens to hit `~/.dsh/profiles/node_modules`; on the other it did not.
+
+What replaced it:
+
+| Was | Is now |
+|---|---|
+| `import('@deepseek-ai/dsh-llm')` + `createUserMessage` + `agent.followup` | `sessionController.prompt({ sessionId, mode, content })` — the same admission path the desktop composer uses, and it takes plain text |
+| `inbox.replace(id, newMessage)` with a freshly built message | `sessionController.updateQueue({ action: { kind: 'edit', content } })` — takes content, keeps the identity and the queue position |
+| `inbox.remove(id)` | `sessionController.updateQueue({ action: { kind: 'remove' } })` |
+| — | `sessionController.updateQueue({ action: { kind: 'steer' } })` — a new 转插话 button, for free |
+
+**One place still builds a message**, because staging a message without waking the
+driver is not something the controller offers — that is the deliberate difference
+between 排队 and 发送. It is mirrored exactly rather than guessed:
+`createUserMessage` is `createMessage({...input, role:'user'})`, `createMessage` is
+`deepFreeze(structuredClone({...input, id}))`, and `Message` has exactly four
+fields, so `createLocalUserMessage` is the whole of it — and it is a pure exported
+function with its own assertions, including that it deep-freezes.
+
+The controller is read with `ctx.get` and deliberately **not** added to `inject`:
+a build without it must still load this plugin and answer with something
+actionable rather than refusing to start.
+
+**A test scans every file in `lib/`** for a bare `@deepseek-ai/` import — static,
+dynamic, or `require` — so this cannot come back a third time.
+
 ## What it gives you
 
 - `GET  /v1/models` — advertises `dsh-agent` (start a conversation) plus **one
@@ -211,7 +253,7 @@ Exercised end-to-end against a running desktop profile:
 | `test/context.test.mjs` | 85 assertions green — the occupancy fold (including that an unmeasured context is `null`, not 0%), the `ManualCompactionError` code mapping, service resolution, and the route contract |
 | `test/clients.test.mjs` | 122 assertions green — an un-approved peer refused everything including the shell, the code never present in anything a remote peer can read, approval surviving a restart through `$DSH_HOME`, a dead code that expires instead of locking a device out forever, a manual replacement clearing that lock, one popup for a LAN sweep rather than one per address, and the same phone recognised when a dual-stack socket respells it |
 | `test/output.test.mjs` | 31 assertions green — reasoning on its own callback and never on the OpenAI face, the fold built lazily, the stop route keeping queued input unless asked, a copy that admits when it could not copy, and that nothing above the composer is a scroll container (which is what let streamed output push the input down the page) |
-| `test/queue.test.mjs` | 38 assertions green — every refusal and the target default, the panel route's wiring, that insert appends without waking the driver, that send-now removes then re-sends, that the plugin keeps no queue of its own, and that a poll cannot close the keyboard mid-edit |
+| `test/queue.test.mjs` | 45 assertions green — every refusal and the target default, the panel route's wiring, that insert appends without waking the driver, that send-now removes then re-sends, that the plugin keeps no queue of its own, and that a poll cannot close the keyboard mid-edit |
 | `test/fork.test.mjs` | 23 assertions green — the cut at a completed turn and never mid-turn, landing on the next turn boundary with trailing events left behind, clamping a seq that runs past the array, the route's wiring, that the child is seeded and parented, and that the source sandbox is NOT inherited |
 | `test/links.test.mjs` | 16 assertions green — a relative or rooted path is never turned into a link, what counts as a path and what does not, that a quoted path keeps its spaces, and that a URL containing `p://` is NOT mangled into a file chip |
 | `test/recovery.test.mjs` | 34 assertions green — in-flight acquisition is shared per key (including by a reentrant caller), a failed key is freed, and a create that lost to a resume reports the real cause |
@@ -220,7 +262,7 @@ Exercised end-to-end against a running desktop profile:
 | `test/questions.test.mjs` | 34 assertions green — the answer reaching the `user-questions/request` waterfall, a partial batch refused without resolving anything, a downstream refusal NOT ending the race, a desktop skip still counting as an answer, a question from another session still being shown, an abort ending the race rather than hanging, and an unchanged poll leaving the DOM alone so typing is not interrupted |
 | `test/integration.test.mjs` | 58 assertions green against a real `node:http` server mounting the real panel: the auth guard covers the new asset, the routes are actually wired, the cookie bootstrap preserves the popup's `id`/`view` while dropping the token, the full handshake completes, and every inline script the phone is actually served parses |
 
-673 assertions across fourteen suites, plus a standalone guard (`test/shell-guard.mjs`)
+680 assertions across fourteen suites, plus a standalone guard (`test/shell-guard.mjs`)
 for the panel's single-template shell.
 
 Still unverified: **how any of this renders on a real phone.** The server half of
