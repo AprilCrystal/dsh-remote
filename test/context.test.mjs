@@ -16,6 +16,7 @@
  *    reader has only opened the meter for.
  */
 
+import { readNormalized } from './source.mjs'
 import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
 import {
@@ -379,7 +380,7 @@ group('the served meter script')
 group('the panel wiring')
 
 {
-  const panel = readFileSync(new URL('../lib/panel.js', import.meta.url), 'utf8')
+  const panel = readNormalized(new URL('../lib/panel.js', import.meta.url), 'utf8')
   ok('the panel imports the context module', panel.includes("from './context-control.js'"))
   ok('it builds the control from options.context',
     panel.includes('createContextControl(ctx, { basePath, runtime, ...options.context })'))
@@ -389,7 +390,7 @@ group('the panel wiring')
   ok('and is dropped when the module is absent',
     panel.includes("if (contexts === null) droppedTags.push('<script src=\"context-ui.js\" defer></script>')"))
 
-  const wire = readFileSync(new URL('../lib/index.js', import.meta.url), 'utf8')
+  const wire = readNormalized(new URL('../lib/index.js', import.meta.url), 'utf8')
   ok('the host passes both callbacks through',
     wire.includes('context: { contextState, compactSession }'))
   ok('compaction goes through the harness service, not a reimplementation',

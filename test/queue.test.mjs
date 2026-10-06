@@ -15,6 +15,7 @@
  * otherwise be covered by nothing at all.
  */
 
+import { readNormalized } from './source.mjs'
 import assert from 'node:assert/strict'
 import { readdirSync, readFileSync } from 'node:fs'
 import { mkdtemp, rm } from 'node:fs/promises'
@@ -39,9 +40,9 @@ async function check(name, fn) {
 
 const TOKEN = 'queue-token'
 const root = await mkdtemp(join(tmpdir(), 'queue-test-'))
-const wire = readFileSync(new URL('../lib/index.js', import.meta.url), 'utf8')
-const shell = readFileSync(new URL('../lib/panel.js', import.meta.url), 'utf8')
-const fab = readFileSync(new URL('../lib/panel-fab.js', import.meta.url), 'utf8')
+const wire = readNormalized(new URL('../lib/index.js', import.meta.url), 'utf8')
+const shell = readNormalized(new URL('../lib/panel.js', import.meta.url), 'utf8')
+const fab = readNormalized(new URL('../lib/panel-fab.js', import.meta.url), 'utf8')
 
 /* ── harness ──────────────────────────────────────────────────────────────── */
 
@@ -254,7 +255,7 @@ await check('nothing in the plugin imports a harness package', () => {
   const files = readdirSync(new URL('../lib/', import.meta.url)).filter((name) => name.endsWith('.js'))
   assert.ok(files.length > 5, `only found ${String(files.length)} lib files to scan`)
   for (const name of files) {
-    const source = readFileSync(new URL('../lib/' + name, import.meta.url), 'utf8')
+    const source = readNormalized(new URL('../lib/' + name, import.meta.url), 'utf8')
     assert.doesNotMatch(source, /import\(\s*['"]@deepseek-ai\//u, `${name} dynamically imports a harness package`)
     assert.doesNotMatch(source, /from\s+['"]@deepseek-ai\//u, `${name} statically imports a harness package`)
     assert.doesNotMatch(source, /require\(\s*['"]@deepseek-ai\//u, `${name} requires a harness package`)

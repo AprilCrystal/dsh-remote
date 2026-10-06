@@ -15,6 +15,7 @@
  *     then reports the id as taken — naming the symptom and hiding the cause.
  */
 
+import { readNormalized } from './source.mjs'
 import { readFileSync } from 'node:fs'
 import { oncePerKey, sessionRecoveryFailure } from '../lib/index.js'
 
@@ -172,7 +173,7 @@ group('explaining a create that lost to a resume')
 group('the wiring that makes this reachable')
 
 {
-  const wire = readFileSync(new URL('../lib/index.js', import.meta.url), 'utf8')
+  const wire = readNormalized(new URL('../lib/index.js', import.meta.url), 'utf8')
   ok('the resume failure is captured instead of discarded', wire.includes('resumeFailure = error'))
   ok('the old silent catch is gone',
     !wire.includes('unresumable: fall through to a fresh create.'))

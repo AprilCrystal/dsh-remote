@@ -16,6 +16,7 @@
  *    IPv6 peer, which is how a dual-stack socket reports it.
  */
 
+import { readNormalized } from './source.mjs'
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -485,7 +486,7 @@ group('what a LAN sweep can pile up')
 group('the wiring')
 
 {
-  const wire = readFileSync(new URL('../lib/index.js', import.meta.url), 'utf8')
+  const wire = readNormalized(new URL('../lib/index.js', import.meta.url), 'utf8')
   ok('the host builds the gate', wire.includes('createClientGate(ctx,'))
   ok('pointing at the documented $DSH_HOME file',
     wire.includes('resolveHomeFile(ctx, CLIENTS_FILE_NAME)'))
@@ -494,14 +495,14 @@ group('the wiring')
     wire.indexOf('clientGate.check(req, res, url)') < wire.indexOf("pathname === `${BASE_PATH}/models`"))
   ok('and the panel receives it', wire.includes('clientGate,'))
 
-  const panel = readFileSync(new URL('../lib/panel.js', import.meta.url), 'utf8')
+  const panel = readNormalized(new URL('../lib/panel.js', import.meta.url), 'utf8')
   const gateAt = panel.indexOf('clientGate.check(req, res, url)')
   const redirectAt = panel.indexOf("if (rest === '') {")
   ok('the panel consults it', gateAt !== -1)
   ok('before the slashless redirect, so the shell cannot be served first',
     gateAt !== -1 && redirectAt !== -1 && gateAt < redirectAt, `${gateAt} < ${redirectAt}`)
 
-  const setup = readFileSync(new URL('../lib/setup.js', import.meta.url), 'utf8')
+  const setup = readNormalized(new URL('../lib/setup.js', import.meta.url), 'utf8')
   ok('the setup state carries the gate', setup.includes('clientGate: gate === null ? null : {'))
   ok('including the pending codes', setup.includes('pending: gate.pending(),'))
   // Source order is the wrong thing to compare; what matters is that the refusal

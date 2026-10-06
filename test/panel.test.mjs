@@ -6,6 +6,7 @@
  * Run: node test/panel.test.mjs
  */
 
+import { readNormalized } from './source.mjs'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { mkdtemp, mkdir, symlink, writeFile, rm } from 'node:fs/promises'
@@ -223,7 +224,7 @@ await check('the HTML shell contains no stray backtick', () => {
   // a backtick anywhere inside it — including in a CSS comment or a JS comment —
   // ends the literal early and produces a parse error somewhere unrelated. This
   // has now happened twice; the assertion is the guard.
-  const source = readFileSync(new URL('../lib/panel.js', import.meta.url), 'utf8')
+  const source = readNormalized(new URL('../lib/panel.js', import.meta.url), 'utf8')
   const open = source.indexOf('html`<!doctype html>')
   assert.notEqual(open, -1, 'could not locate the shell template')
   const close = source.indexOf('</html>`', open)

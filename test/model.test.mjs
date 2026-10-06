@@ -8,6 +8,7 @@
  * instead of a rejected request.
  */
 
+import { readNormalized } from './source.mjs'
 import { readFileSync } from 'node:fs'
 import { createModelControl } from '../lib/model-control.js'
 import vm from 'node:vm'
@@ -282,7 +283,7 @@ group('where the selection is installed')
   // The throw escaped `setup`, which failed the whole acquisition; the bridge then
   // fell through to `create`, which answered "session already exists" — a message
   // about the store, for a bug in a listener.
-  const wire = readFileSync(new URL('../lib/index.js', import.meta.url), 'utf8')
+  const wire = readNormalized(new URL('../lib/index.js', import.meta.url), 'utf8')
   // Assert against the code, not the prose: the comment explaining this bug has
   // to be able to name the very expression it warns against.
   const code = wire.replace(/\/\*[\s\S]*?\*\//gu, '').replace(/^[ \t]*\/\/.*$/gmu, '')
