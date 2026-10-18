@@ -127,9 +127,15 @@ Provider → "OpenAI API Compatible"**:
 ## Safety model — read this before exposing it
 
 **The bridge is loopback-only by default.** It mounts on the *existing*
-webserver and inherits that server's bind, which is `127.0.0.1` unless a
-deployment deliberately patches the `webserver` row to `0.0.0.0`. This plugin
-never widens the bind itself.
+webserver and inherits that server's bind, which is `127.0.0.1`. This plugin
+never widens the bind itself — and since `@deepseek-ai/dsh-host-webserver`
+0.2.1-rc.2 a deployment **cannot** widen it either: the schema rejects a
+wildcard host while resolving config, and because `webserver` is a required
+plugin that rejection stops the whole boot
+(`webserver: host "0.0.0.0" is an unspecified (wildcard) address...`). What
+that leaves — and why a loopback TCP proxy is *not* a substitute, since it
+defeats the pairing gate below — is spelled out in
+[SETUP.zh.md §2](SETUP.zh.md).
 
 **The one route that answers before a token exists is `/setup`, and it is
 restricted to this machine.** It checks the peer address and returns 403 to
@@ -267,7 +273,7 @@ Exercised end-to-end against a running desktop profile:
 | `POST /v1/chat/completions` (`stream: true`) | Correct `chat.completion.chunk` frames, terminated by `data: [DONE]` |
 | `read-only` preset actually pinned | Agent self-reported its file policy as `read-only` |
 | Second turn in the same conversation | Mapped to the same session, only the newest message forwarded |
-| `0.0.0.0` bind | Server reachable on the LAN address, and from a phone |
+| `0.0.0.0` bind | Server reachable on the LAN address, and from a phone — **historical**: measured before the wildcard rejection. That bind now prevents DSH from starting at all |
 | Panel sign-in (`?token=`) | 303 + `Set-Cookie`, then `/bridge/` serves the shell |
 | Slashless `/bridge` | 308 to `/bridge/`, so relative API fetches resolve correctly |
 | Panel auth fence | 401 without the cookie or bearer token |

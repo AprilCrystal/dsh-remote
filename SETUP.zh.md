@@ -11,7 +11,7 @@
 | 记录里的说法 | 结论 | 依据 |
 |---|---|---|
 | 插件不自己开端口，把路由挂到 DSH 已在跑的 HTTP 服务上 | ✅ | 全部路由都走 `ctx.webServer.register` |
-| 那个服务默认只绑回环，所以要给**整个服务**换绑 | ✅ | 本机实测监听是 `0.0.0.0:19387` |
+| 那个服务默认只绑回环，所以要给**整个服务**换绑 | ❌ **已失效** | 早期版本可以，本机实测过 `0.0.0.0:19387`；0.2.1-rc.2 起 host schema 在解析配置时拒绝通配地址，绑上就整个 DSH 起不来 —— 见 §2 |
 | 没有令牌 = 其余路由**不挂载**（失败关闭） | ✅ | `/v1`、`/bridge` 都不注册，只留 `/setup` |
 | 令牌在 `apply()` **加载时读一次**，生成后必须重启 | ✅ | 这正是"生成 → 重启"分成两步的原因 |
 | 令牌文件写入用 `mode: 0o600` | ✅ 代码确实传了这个参数 | ⚠️ 但 **Windows/NTFS 不执行 POSIX 权限位** —— 实际保护来自用户目录的 ACL，不是这个参数 |
@@ -19,7 +19,7 @@
 | `lastSeen` 不是每次请求都刷新 | ⚠️ **要拆开讲** | **内存里**每次被允许的请求都刷；**落盘只在批准/撤销时**。所以磁盘上的值会旧，而设置页显示的是内存值（新）。结论不变：别拿它判断"手机现在还在线" |
 | 上传是唯一的写洞，只有浏览根下的 `_inbox/` 可写 | ✅ | `panel.js` 顶部契约注释：本模块唯一的写操作就是往固定的 `_inbox` 上传 |
 | 审批落在**桌面 GUI**，纯 OpenAI 客户端答不了 | ✅ | 审批是 agent 作用域的事件，只有面板/桌面能应答 |
-| 绑 `0.0.0.0` **不会**让手机用上 DSH GUI 本体 | ✅ | 本机实测：局域网访问 `/setup` 是 **403**；`/v1` 需要令牌 |
+| 绑 `0.0.0.0` **不会**让手机用上 DSH GUI 本体 | ⚠️ 结论仍成立，但前提没了 | 当时实测：局域网访问 `/setup` 是 **403**；`/v1` 需要令牌。现在 `0.0.0.0` 根本绑不上（§2），这一条只剩历史意义 |
 
 核对的人不是原文作者。**如果你发现哪一条与实测不符，以实测为准**，并把差异记回来。
 
@@ -57,11 +57,12 @@
 
 ---
 
-## 2. 配置 profile patch：把 host 绑到 `0.0.0.0`
+## 2. ⚠️ 旧做法已失效：`host: 0.0.0.0` 现在会让 DSH 起不来
 
-编辑 `$DSH_HOME/profiles/desktop/cordis.patch.yml`，在顶层数组末尾追加：
+写这份记录时确实要给 `webserver` 换绑 `0.0.0.0`。**这条路已经封了**，下面这段**不要照抄**：
 
 ```yaml
+# ❌ 会让整个 DSH 无法启动（0.2.1-rc.2 起）
 - id: webserver
   name: "@deepseek-ai/dsh-host-webserver"
   config:
@@ -69,19 +70,55 @@
     port: 19387
 ```
 
-### ⚠️ 两个必须注意的点
+`@deepseek-ai/dsh-host-webserver` 的 Config schema 在**解析配置时**就拒绝通配地址：
 
-1. **`port` 必须一起写死。** 这一行的 schema 里 `host` 和 `port` **都是必填**。只写 `host` 会让 GUI 换到随机端口，你现在的 `http://127.0.0.1:19387` 就失效了。
-2. **这是全局改动。** 它放宽的是**整个** webserver，不是只给 bridge 开个口子。DSH 那个服务**自身不带 TLS、不带认证、不带同源策略**——保护各自路由的是路由拥有者自己（bridge 用 Bearer token，GUI 的 `/api` 用浏览器 cookie）。
+```
+webserver: host "0.0.0.0" is an unspecified (wildcard) address, which is not supported:
+binding every interface would expose remote code execution to the network;
+bind one concrete IPv4 or IPv6 address of a local interface instead
+```
 
-### 这一步不用重启
+而 `webserver` 是 **required** 插件。它一挂，`web-runtime`、`client-hmr`、`open-in-app`、
+`directory-picker`、`harness-dev-context`、`openai-bridge` 全部在等 `webServer`，于是整个
+boot 失败：
 
-profile patch 是被监听的，**写入后 HMR 立即重组配置**，绑定当场生效。验证：
+```
+dsh: startup failed: 2 required plugins did not activate
+```
+
+### 现在只有两种选择，而且都有代价
+
+**A. 保持回环（默认）** — 桌面和桥都正常，但桥只在**本机**可用：
+`http://127.0.0.1:<port>/bridge?token=…`。手机进不来。
+
+**B. 绑一个具体局域网地址**（例如 `10.111.100.108`）— 手机可用，配对栅栏看到的也是真实
+peer IP。代价有两个：
+桌面宿主是用 `http://127.0.0.1:<port>` 构造窗口地址的（`dsh-desktop-host` 里
+`authenticatedUrl(...//127.0.0.1:${port})` 是写死的），所以绑了具体 LAN 地址之后
+**桌面窗口自己就连不上**；另外 DHCP 换 IP 后应用会直接起不来，必须跟着改。
+
+### 不要用 `netsh portproxy` 之类的本机转发
+
+桥在 `client-gate.js` 里把**回环来源的请求直接放行、跳过配对**：
+
+```js
+if (isLoopbackAddress(ip)) return false
+```
+
+而 portproxy 转发到 `127.0.0.1` 时源地址就是回环 —— 于是**每一台手机都会被当成"本机操作员"，
+设备白名单形同虚设**。这条路看着能通，实际是把配对机制整个绕过。
+
+> 结论：`0.0.0.0` 被封之后，这个桥的「手机可用」模式在这版 DSH 上**没有安全等价物**。
+> 要么接受只能在桌面用，要么等插件把配对栅栏改成能识别受信任代理（`X-Forwarded-For`
+> 或显式 `trustedProxies` 配置）再谈局域网。
+
+### 验证现在用的是哪种
 
 ```powershell
-Get-NetTCPConnection -LocalPort 19387 -State Listen |
-  Select-Object LocalAddress, LocalPort
-# 期望：0.0.0.0   19387     （改之前是 127.0.0.1）
+Get-NetTCPConnection -LocalPort 19387 -State Listen | Select-Object LocalAddress, LocalPort
+# 期望：127.0.0.1  19387      （方案 A）
+# 或   10.x.x.x   19387      （方案 B）
+# 若出现 0.0.0.0，说明还在用旧配置 —— 那份配置会让 DSH 起不来
 ```
 
 ---
@@ -194,11 +231,14 @@ Invoke-WebRequest http://127.0.0.1:19387/v1/models -Headers @{Authorization="Bea
 
 ### 8.1 绑 `0.0.0.0` **不会**让手机用上 DSH GUI
 
+> 这一节记录的是**当时**（`0.0.0.0` 还能绑时）的实测结论。现在 `0.0.0.0` 会让 DSH 直接起不来，
+> 所以下面的前提已不存在；保留它是为了解释「为什么桥的暴露面比 GUI 小」这个设计。
+
 这一条反直觉，但有据：
 
 - DSH 的浏览器认证要求每个请求的 `Host` **是回环**，或匹配显式配置的 `trustedHosts` 条目
 - 不匹配 → **403**；匹配但未认证 → 401
-- DSH 文档明确写着 `dsh web --host 0.0.0.0` **不被支持**
+- `dsh web --host 0.0.0.0` **不被支持**（现在更是：连配置解析都通不过，见 §2）
 
 所以结果是**分离**的：
 
@@ -300,7 +340,8 @@ New-NetFirewallRule -DisplayName "DSH Bridge 19387 (LAN only)" `
 ## 11. 最短路径重述
 
 ```
-1.  profile patch 加 webserver 行（host: 0.0.0.0 + port: 19387）   → 立即生效
+1.  profile patch 决定绑定（§2）：保持回环 = 只有本机可用；
+    绑具体局域网 IP = 手机可用，但桌面窗口连不上
 2.  重启 DSH                                                      → 载入插件代码
     （此时 Windows 大概率弹出防火墙询问 → 必须勾上「专用」+「公用」，
       否则 WLAN 属于 Public，入站会被拦。详见 §8.2）
