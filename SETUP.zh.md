@@ -6,6 +6,52 @@
 >
 > 相关：[GUIDE.zh.md](GUIDE.zh.md)（怎么用） · [PANEL.zh.md](PANEL.zh.md)（面板功能细节） · [README.md](README.md)（配置项与设计）
 
+## 0. 升级 DSH 后启动崩溃，先看这里
+
+**症状**：更新 DSH 之后，桌面应用弹出「The application could not start or stopped
+unexpectedly」，日志里是：
+
+```
+dsh: startup failed: 2 required plugins did not activate
+
+Failed plugins (1):
+  webserver (required)
+    Package: @deepseek-ai/dsh-host-webserver
+    Error: webserver: host "0.0.0.0" is an unspecified (wildcard) address, which is not supported:
+    binding every interface would expose remote code execution to the network
+```
+
+同时列出 6 个在等服务的插件：`web-runtime`、`client-hmr`、`open-in-app`、`directory-picker`、
+`harness-dev-context`、`openai-bridge`。
+
+**原因**：profile 的 `cordis.patch.yml` 里那行 `host: 0.0.0.0`。新版在**配置解析阶段**就拒绝
+通配地址，而 `webserver` 是 required 插件 —— 一行配置就能把整个 boot 拖垮，**插件本身无辜**。
+本文 §2 早期正是教人加这一行的，所以升级后照着旧配置走的机器会直接起不来。
+
+**日志位置**：
+
+```
+%APPDATA%\@deepseek-ai\dsh-desktop\logs\crash-<时间戳>-host.log
+```
+
+**处置**：编辑 `$DSH_HOME\profiles\desktop\cordis.patch.yml`，把 `host: 0.0.0.0` 改成
+`host: '127.0.0.1'`；或者**整行删掉**（删掉更好 —— 让 bundle 的默认值生效，将来 schema 再变也
+不会因为这份覆盖而失效）。保存后 profile 被监听，会自己重组。
+
+**不要点那个按钮。** 「Disable third-party plugins, back up profile patch, and restart」
+会同时**禁用所有第三方 bundle** 并**把 profile patch 重置成最小版** —— 救你的是后半句，
+代价是你的供应商配置、agent 预设、界面设置全部回默认。第一件事永远是**打开日志，看失败的是哪个插件**。
+
+**留一份能回滚的副本**（做一次就够，出事后一条命令回退）：
+
+```powershell
+Copy-Item "$DSH_HOME\profiles\desktop\cordis.patch.yml" `
+          "$DSH_HOME\profiles\desktop\cordis.patch.yml.good"
+# 出事时：
+# Copy-Item "$DSH_HOME\profiles\desktop\cordis.patch.yml.good" `
+#           "$DSH_HOME\profiles\desktop\cordis.patch.yml"
+```
+
 ## 核对结果
 
 | 记录里的说法 | 结论 | 依据 |
@@ -340,8 +386,8 @@ New-NetFirewallRule -DisplayName "DSH Bridge 19387 (LAN only)" `
 ## 11. 最短路径重述
 
 ```
-1.  profile patch 决定绑定（§2）：保持回环 = 只有本机可用；
-    绑具体局域网 IP = 手机可用，但桌面窗口连不上
+1.  不要给 profile patch 加 webserver 行（§0、§2）：默认的回环绑定就是对的，
+    加了反而会挡住将来的 schema 变化。需要手机访问时，先读 §2 的两个选项和它们各自的代价
 2.  重启 DSH                                                      → 载入插件代码
     （此时 Windows 大概率弹出防火墙询问 → 必须勾上「专用」+「公用」，
       否则 WLAN 属于 Public，入站会被拦。详见 §8.2）
