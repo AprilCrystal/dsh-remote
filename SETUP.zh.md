@@ -42,6 +42,11 @@ Failed plugins (1):
 会同时**禁用所有第三方 bundle** 并**把 profile patch 重置成最小版** —— 救你的是后半句，
 代价是你的供应商配置、agent 预设、界面设置全部回默认。第一件事永远是**打开日志，看失败的是哪个插件**。
 
+**全新机器上会不会重演？不会，前提是你别照抄旧配置。** `dsh plugin add github:AprilCrystal/dsh-remote`
+装完就能用，**不需要动 profile 里的绑定** —— bundle 默认的回环绑定正是本插件需要的。只有当你要让
+**手机**连进来时，才需要读 §2，而那里已经没有「绑 `0.0.0.0`」这个选项了。换句话说：新机器不会
+自己踩这个坑，**唯一会踩的方式是手动加上那行旧配置**，而本文已经不再提供它。
+
 **留一份能回滚的副本**（做一次就够，出事后一条命令回退）：
 
 ```powershell
@@ -105,16 +110,9 @@ Copy-Item "$DSH_HOME\profiles\desktop\cordis.patch.yml" `
 
 ## 2. ⚠️ 旧做法已失效：`host: 0.0.0.0` 现在会让 DSH 起不来
 
-写这份记录时确实要给 `webserver` 换绑 `0.0.0.0`。**这条路已经封了**，下面这段**不要照抄**：
-
-```yaml
-# ❌ 会让整个 DSH 无法启动（0.2.1-rc.2 起）
-- id: webserver
-  name: "@deepseek-ai/dsh-host-webserver"
-  config:
-    host: 0.0.0.0
-    port: 19387
-```
+写这份记录时确实要给 `webserver` 换绑 `0.0.0.0`。**这条路已经封了**：旧手册让你在 profile
+patch 里加一条 `- id: webserver` 行、把 `host` 写成 `0.0.0.0` —— 现在这么写，DSH 连启动都
+做不到。这里刻意**不再给出可复制的配置块**，因为那正是当初被照抄、然后炸掉一整次启动的东西。
 
 `@deepseek-ai/dsh-host-webserver` 的 Config schema 在**解析配置时**就拒绝通配地址：
 
