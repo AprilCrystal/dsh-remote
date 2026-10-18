@@ -506,10 +506,12 @@ group('the wiring')
   ok('the setup state carries the gate', setup.includes('clientGate: gate === null ? null : {'))
   ok('including the pending codes', setup.includes('pending: gate.pending(),'))
   // Source order is the wrong thing to compare; what matters is that the refusal
-  // returns before the handler can reach the state route it feeds.
+  // returns before the handler can reach the state route it feeds. The peer is
+  // resolved through `trustedProxies`, so the call site is named in full here.
+  const loopbackAt = setup.indexOf('if (!isLoopback(req, trustedProxies))')
   ok('behind the loopback check',
-    setup.indexOf('if (!isLoopback(req))') < setup.indexOf("rest === '/state'"),
-    `${setup.indexOf('if (!isLoopback(req))')} < ${setup.indexOf("rest === '/state'")}`)
+    loopbackAt !== -1 && loopbackAt < setup.indexOf("rest === '/state'"),
+    `${loopbackAt} < ${setup.indexOf("rest === '/state'")}`)
   ok('and offers a way to forget a device', setup.includes("rest === '/clients/forget'"))
   ok('and a way to replace a code by hand', setup.includes("rest === '/clients/refresh'"))
 }

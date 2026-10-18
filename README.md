@@ -139,10 +139,12 @@ never widens the bind itself — and since `@deepseek-ai/dsh-host-webserver`
 0.2.1-rc.2 a deployment **cannot** widen it either: the schema rejects a
 wildcard host while resolving config, and because `webserver` is a required
 plugin that rejection stops the whole boot
-(`webserver: host "0.0.0.0" is an unspecified (wildcard) address...`). What
-that leaves — and why a loopback TCP proxy is *not* a substitute, since it
-defeats the pairing gate below — is spelled out in
-[SETUP.zh.md §2](SETUP.zh.md).
+(`webserver: host "0.0.0.0" is an unspecified (wildcard) address...`). A reverse
+proxy in front of DSH is the supported way to serve a phone over the LAN, but
+only through `trustedProxies`: with it configured the gate judges the client the
+proxy names, and a trusted proxy that forwards no `X-Forwarded-For` is refused
+rather than mistaken for the local operator. Both cases are in
+[SETUP.zh.md §2.1](SETUP.zh.md).
 
 **The one route that answers before a token exists is `/setup`, and it is
 restricted to this machine.** It checks the peer address and returns 403 to
