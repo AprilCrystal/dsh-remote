@@ -39,6 +39,8 @@
     "lib/client-gate.js",
     "lib/setup.js",
     "lib/setup-page.html",
+    "lib/peer.js",
+    "tools/lan-proxy.mjs",
     "cordis.patch.yml",
     "README.md",
     "PANEL.zh.md",

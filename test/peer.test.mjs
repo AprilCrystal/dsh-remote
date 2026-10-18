@@ -137,6 +137,16 @@ const req = (remoteAddress, forwarded) => ({
   ok('the plugin reads the config key', indexSource.includes('config?.trustedProxies'))
   ok('and passes it to the gate', /createClientGate\(ctx, \{[\s\S]*?trustedProxies,/.test(indexSource))
   ok('and to the setup page', indexSource.includes('clientGate, trustedProxies'))
+
+  // The LAN proxy has no way to guess a port the launcher picks at random, so the
+  // plugin publishes it. Losing this file turns the proxy into a 503, so it is
+  // worth pinning at the source level too.
+  ok('the setup module publishes the listen origin',
+    setupSource.includes('export function publishOrigin'))
+  ok('named where the proxy looks for it', setupSource.includes("'openai-bridge-origin.txt'"))
+  ok('and the plugin calls it before it can return early',
+    indexSource.includes('publishOrigin(ctx,') &&
+      indexSource.indexOf('publishOrigin(ctx,') < indexSource.indexOf("if (token === '')"))
 }
 
 console.log(`\n${passed} passed, ${failed} failed`)
