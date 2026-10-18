@@ -81,6 +81,14 @@
     <p class="note" id="tokenhint"></p>
   </div>
 
+  <div class="card" id="lancard">
+    <h2>局域网入口 <span id="lanpill" class="pill">读取中…</span></h2>
+    <p class="note">DSH 只绑回环，所以手机要在<b>这个进程</b>开的第二个端口上进。它随插件一起启动，不需要另开命令；活动记录就显示在下面。</p>
+    <div id="lanfacts"></div>
+    <div id="lanurls"></div>
+    <div class="msg" id="lanmsg"></div>
+  </div>
+
   <div class="card" id="clientcard">
     <h2>设备白名单 <span id="clientpill" class="pill">读取中…</span></h2>
     <p class="note">本机永远免验证。局域网上的设备第一次访问会被拦下，需要在这里读出验证码，然后在<b>那台设备上</b>填一次。验证码只在这个页面出现，手机端的接口永远拿不到它。</p>
@@ -211,6 +219,78 @@
       ? '这个令牌来自 cordis.patch.yml，优先级高于令牌文件。想在这里管理，就把配置里的 token 清空，改用令牌文件。'
       : '令牌文件是 ' + state.tokenFile + '。写入新令牌后需要重启 DSH 才会生效。')
     text('selftest', 'http://127.0.0.1' + (state.port ? ':' + state.port : '') + state.panelPath + '/')
+    renderLan()
+  }
+
+  /**
+   * The LAN listener's own report.
+   *
+   * Three states matter and they look identical from a phone: not configured, up,
+   * and failed to bind. The page says which, and lists the address a phone should
+   * use — built from the listener's port, not from the loopback one.
+   */
+  function renderLan() {
+    var info = state.lanProxy
+    var pill = el('lanpill')
+    var facts = el('lanfacts')
+    var urls = el('lanurls')
+    var msg = el('lanmsg')
+
+    if (!info) {
+      pill.textContent = '未启用'
+      pill.className = 'pill off'
+      facts.replaceChildren(
+        row('状态', '没有配置 lanProxy'),
+        row('怎么开', '在 profile 的桥配置里加 lanProxy: 19387，然后重启 DSH')
+      )
+      urls.replaceChildren()
+      msg.textContent = ''
+      return
+    }
+
+    var failed = info.lastError !== '' && !info.running
+    pill.textContent = failed ? '启动失败' : (info.running ? '监听中' : '未监听')
+    pill.className = 'pill ' + (failed ? 'off' : (info.running ? 'on' : 'off'))
+
+    facts.replaceChildren(
+      row('监听', info.listen + ':' + info.port),
+      row('转发到', info.origin),
+      row('已处理请求', String(info.requests)),
+      row('启动于', new Date(info.startedAt).toLocaleTimeString())
+    )
+
+    var nodes = []
+    if (info.running && info.addresses.length > 0) {
+      info.addresses.forEach(function (address) {
+        var wrapper = document.createElement('div')
+        wrapper.className = 'urlrow'
+        var who = document.createElement('span')
+        who.className = 'who'
+        who.textContent = address
+        var input = document.createElement('input')
+        input.readOnly = true
+        input.value = 'http://' + address + ':' + info.port + state.panelPath + '?token=' + (state.token || '<TOKEN>')
+        input.onfocus = function () { input.select() }
+        var copy = document.createElement('button')
+        copy.textContent = '复制'
+        copy.onclick = function () {
+          navigator.clipboard.writeText(input.value).then(function () {
+            copy.textContent = '已复制'
+            setTimeout(function () { copy.textContent = '复制' }, 1400)
+          }, function () {
+            input.focus()
+            input.select()
+          })
+        }
+        wrapper.append(who, input, copy)
+        nodes.push(wrapper)
+      })
+    }
+    urls.replaceChildren.apply(urls, nodes)
+
+    msg.textContent = failed
+      ? info.lastError
+      : (info.running ? '' : '端口还没绑定上，稍后刷新；若一直如此，检查端口是否被占用。')
   }
 
   function renderClients() {

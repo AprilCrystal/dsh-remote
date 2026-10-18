@@ -75,13 +75,27 @@ const req = (remoteAddress, forwarded) => ({
 
 // ── fail closed ─────────────────────────────────────────────────────────────
 {
-  const silent = resolvePeer(req('127.0.0.1'), ['127.0.0.1'])
-  ok('a trusted hop that forwards nothing is flagged', silent.unforwarded === true)
-  ok('and has no address to judge', silent.address === '')
-  ok('so setup access is refused rather than inherited', !isLoopback(req('127.0.0.1'), ['127.0.0.1']))
+  // A bare request from a trusted address is this machine's own browser, not a
+  // proxy that lost the header. Refusing it locked the operator out of the very
+  // console the pairing flow depends on, which is how this was found.
+  const direct = resolvePeer(req('127.0.0.1'), ['127.0.0.1'])
+  ok('a trusted address with no forwarding markers is a direct client', direct.viaProxy === false)
+  ok('and keeps its own address', direct.address === '127.0.0.1')
+  ok('so the local console still opens', isLoopback(req('127.0.0.1'), ['127.0.0.1']))
 
-  const emptyHeader = resolvePeer(req('127.0.0.1', '   '), ['127.0.0.1'])
-  ok('a blank forwarded header is the same as none', emptyHeader.unforwarded === true)
+  // A request that IS marked as forwarded, with no client address, still fails.
+  const marked = (headers) => ({ socket: { remoteAddress: '127.0.0.1' }, headers })
+  const silent = resolvePeer(marked({ 'x-forwarded-proto': 'http' }), ['127.0.0.1'])
+  ok('a forwarded request with no client address is flagged', silent.unforwarded === true)
+  ok('and has no address to judge', silent.address === '')
+  ok('so it is refused rather than inherited',
+    !isLoopback(marked({ 'x-forwarded-proto': 'http' }), ['127.0.0.1']))
+
+  const blank = resolvePeer(
+    marked({ 'x-forwarded-for': '   ', 'x-forwarded-proto': 'http' }),
+    ['127.0.0.1'],
+  )
+  ok('a blank forwarded list still counts as forwarded', blank.unforwarded === true)
 
   const selfOnly = resolvePeer(req('127.0.0.1', '127.0.0.1'), ['127.0.0.1'])
   ok('a chain of only trusted hops leaves no client', selfOnly.unforwarded === true)
@@ -136,7 +150,13 @@ const req = (remoteAddress, forwarded) => ({
   const indexSource = readNormalized(new URL('../lib/index.js', import.meta.url))
   ok('the plugin reads the config key', indexSource.includes('config?.trustedProxies'))
   ok('and passes it to the gate', /createClientGate\(ctx, \{[\s\S]*?trustedProxies,/.test(indexSource))
-  ok('and to the setup page', indexSource.includes('clientGate, trustedProxies'))
+  ok('and to the setup page', /installSetup\(ctx, \{[\s\S]*?trustedProxies,/.test(indexSource))
+  ok('the LAN listener is started from the plugin, not by hand',
+    indexSource.includes('startLanProxy(ctx, { origin, port, listen })'))
+  ok('and its handle reaches the console',
+    /installSetup\(ctx, \{[\s\S]*?lanProxy,/.test(indexSource))
+  const setupPage = readNormalized(new URL('../lib/setup-page.html', import.meta.url))
+  ok('which renders it', setupPage.includes("el('lanpill')"))
 
   // The LAN proxy has no way to guess a port the launcher picks at random, so the
   // plugin publishes it. Losing this file turns the proxy into a 503, so it is

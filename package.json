@@ -40,6 +40,7 @@
     "lib/setup.js",
     "lib/setup-page.html",
     "lib/peer.js",
+    "lib/lan-proxy.js",
     "tools/lan-proxy.mjs",
     "cordis.patch.yml",
     "README.md",
