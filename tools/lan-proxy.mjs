@@ -100,6 +100,8 @@ const normalize = (address) => String(address ?? '').replace(/^::ffff:/u, '')
 let cachedAt = 0
 let cachedOrigin = null
 let cachedWhy = ''
+/** The last origin handed out, so a restart is visible in the log. */
+let announced = ''
 
 function currentOrigin() {
   const now = Date.now()
@@ -114,6 +116,12 @@ function currentOrigin() {
     }
     cachedOrigin = url
     cachedWhy = ''
+    // DSH is restarted with a new port often enough that silently following it
+    // hides the one event worth seeing: the target moved under us.
+    if (url.href !== announced) {
+      if (announced !== '') console.log(`lan-proxy: DSH moved, now forwarding to ${url.href}`)
+      announced = url.href
+    }
   } catch (error) {
     cachedOrigin = null
     cachedWhy = String(error?.message ?? error)
