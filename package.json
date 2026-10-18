@@ -52,7 +52,8 @@
     }
   },
   "scripts": {
-    "test": "node test/run-all.mjs"
+    "test": "node test/run-all.mjs",
+    "verify:lan": "node tools/lan-proxy.mjs --check"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "~4.0.4"

@@ -40,15 +40,17 @@ const HELP = `lan-proxy — expose the DSH bridge to the LAN without rebinding D
   --listen <addr>     interface to bind (default 0.0.0.0, every interface)
   --origin-file <p>   where the plugin publishes its origin
                       (default $DSH_HOME/openai-bridge-origin.txt)
+  --check             verify the chain and exit without listening (exit 0 ok, 1 not)
   --help              this text
 `
 
 function parseArgs(argv) {
-  const options = { port: 19387, listen: '0.0.0.0', originFile: '', help: false }
+  const options = { port: 19387, listen: '0.0.0.0', originFile: '', help: false, check: false }
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index]
     const value = argv[index + 1]
     if (flag === '--help' || flag === '-h') options.help = true
+    else if (flag === '--check') options.check = true
     else if (flag === '--port' && value !== undefined) {
       options.port = Number(value)
       index += 1
@@ -81,6 +83,49 @@ const options = (() => {
 if (options.help) {
   console.log(HELP)
   process.exit(0)
+}
+
+/**
+ * Verify the chain without listening.
+ *
+ * This is the answer to "is the phone setup broken, and where": it separates the
+ * three failures that look identical from a phone — the plugin not mounted (no
+ * origin file), the origin file pointing somewhere wrong, and the bridge being
+ * up but unreachable on the port it published.
+ */
+async function check() {
+  const origin = currentOrigin()
+  if (origin === null) {
+    console.error('lan-proxy: FAIL no usable origin')
+    console.error(`  file: ${ORIGIN_FILE}`)
+    console.error(`  why:  ${cachedWhy || 'unknown'}`)
+    console.error('  the plugin publishes this file when it mounts; if it is missing, the')
+    console.error('  bridge did not mount — check the DSH host log for an openai-bridge error.')
+    return 1
+  }
+  console.log(`lan-proxy: origin ${origin.href}`)
+  let status
+  try {
+    const answer = await fetch(new URL('/setup', origin), { redirect: 'manual' })
+    status = answer.status
+    await answer.arrayBuffer()
+  } catch (error) {
+    console.error(`lan-proxy: FAIL cannot reach ${origin.href}: ${String(error?.message ?? error)}`)
+    return 1
+  }
+  console.log(`lan-proxy: GET /setup -> ${status}`)
+  if (status === 404) {
+    console.error('lan-proxy: FAIL DSH answers, but the bridge is not mounted there.')
+    console.error('  the plugin loaded without its routes; check the host log.')
+    return 1
+  }
+  console.log('lan-proxy: OK the bridge answers through the published origin')
+  return 0
+}
+
+if (options.check) {
+  // Runs at the bottom: the origin cache is declared further down, and reading it
+  // before its declaration is a temporal-dead-zone error, not a missing value.
 }
 
 const ORIGIN_FILE = options.originFile !== ''
@@ -230,6 +275,10 @@ server.on('error', (error) => {
   }
   process.exit(1)
 })
+
+// Placed here, after every declaration above: `--check` reads the origin cache,
+// and touching it before its `let` is a temporal-dead-zone error.
+if (options.check) process.exit(await check())
 
 server.listen(options.port, options.listen, () => {
   const addresses = []
